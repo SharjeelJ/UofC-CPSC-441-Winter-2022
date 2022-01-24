@@ -1,9 +1,9 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <unistd.h>
 #include <netinet/in.h>
-#include <signal.h>
-#include <string.h>
+#include <csignal>
+#include <cstring>
 #include <arpa/inet.h>
 #include <regex.h>
 #include <netdb.h>
@@ -13,13 +13,6 @@
 
 // Global variables
 int clientChildSocket;
-
-// TODO: Determine if necessary
-/* This is a signal handler to do graceful exit if needed */
-void catcher(int sig) {
-    close(clientChildSocket);
-    exit(0);
-}
 
 // Returns the substring obtained from the first passed in string where the second passed in string is the start boundary and third passed in string is the end boundary (only returns the string between the start and end boundaries)
 char *customSubstring(char *originalString, const char *startSubstringTerm, const char *endSubstringTerm) {
@@ -51,10 +44,7 @@ char *customSubstring(char *originalString, const char *startSubstringTerm, cons
 // Main function
 int main() {
     // Creates a struct that will store the complete address of the socket being created
-    struct sockaddr_in clientServer;
-
-    // TODO: Determine if needed
-    static struct sigaction act;
+    struct sockaddr_in clientServer = {};
 
     // Creates char arrays that will store the incoming and outgoing message bytes between the client and the server
     char clientIncomingMessage[MAX_MESSAGE_LENGTH];
@@ -67,17 +57,11 @@ int main() {
     // Creates a socket that will be used by the server to communicate with the client
     int mainServerSocket;
 
-    // Create an int that will store the number of bytes contained within a message between the client and the serveer
+    // Create an int that will store the number of bytes contained within a message between the client and the server
     int bytes;
 
     // Stores the PID of a child fork
     pid_t pid;
-
-    // TODO: Determine if needed
-    /* Set up a signal handler to catch some weird termination conditions. */
-    act.sa_handler = catcher;
-    sigfillset(&(act.sa_mask));
-    sigaction(SIGPIPE, &act, NULL);
 
     // Allocates memory to the location that will store the address of the socket
     memset(&clientServer, 0, sizeof(clientServer));
@@ -118,7 +102,7 @@ int main() {
         // Accepts an incoming socket connection request
         clientChildSocket = accept(mainServerSocket, NULL, NULL);
         if (clientChildSocket == -1) {
-            fprintf(stderr, "mypal-clientServer: accept() call failed!\n");
+            fprintf(stderr, "Server: accept() call failed!\n");
             exit(1);
         }
 
@@ -145,7 +129,7 @@ int main() {
                 strcpy(host, customSubstring(clientIncomingMessage, "Host: ", "\n"));
 
                 // Creates a struct that will store the complete address of the socket being created
-                struct sockaddr_in proxyServer;
+                struct sockaddr_in proxyServer = {};
 
                 // Creates a char array that will store the reply the server receives from destination that the client would like to talk to
                 char proxyServerReply[MAX_MESSAGE_LENGTH];
@@ -214,7 +198,7 @@ int main() {
                 // Forwards the end server's reply to the client
                 bytes = send(clientChildSocket, proxyServerReply, strlen(proxyServerReply), 0);
                 if (bytes < 0) {
-                    fprintf(stderr, "mypal-clientServer: send() failed! OMG!!\n");
+                    fprintf(stderr, "Server: send() failed!\n");
                 }
 
                 // Closes the socket with the end server
