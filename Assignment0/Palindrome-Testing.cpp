@@ -19,7 +19,7 @@
 // Main function
 int main() {
     // Creates a struct that will store the complete address of the socket being created
-    struct sockaddr_in socketAddress{};
+    struct sockaddr_in socketAddress;
 
     // Allocates memory to the location that will store the address of the socket
     memset(&socketAddress, 0, sizeof(socketAddress));
