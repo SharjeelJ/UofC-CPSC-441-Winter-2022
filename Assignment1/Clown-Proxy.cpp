@@ -8,7 +8,7 @@
 #include <regex.h>
 #include <netdb.h>
 
-#define MAX_MESSAGE_LENGTH 4000
+#define MAX_MESSAGE_LENGTH 1024
 #define PROXY_SERVER_PORT 9090
 
 // Global variables
@@ -132,7 +132,8 @@ int main() {
                 struct sockaddr_in proxyServer = {};
 
                 // Creates a char array that will store the reply the server receives from destination that the client would like to talk to
-                char proxyServerReply[MAX_MESSAGE_LENGTH];
+                char *proxyServerReply = (char *) malloc(1);
+                int proxyServerReplyBytes = 1;
 
                 // Creates a socket that will be used by the server to communicate with the end server
                 int proxySocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -179,14 +180,23 @@ int main() {
                 // TODO: Remove
                 puts("Data Send\n");
 
+                // Creates a temporary buffer to hold the first chunk of data being received from the server
+                char test[MAX_MESSAGE_LENGTH];
+
                 // Receives the reply using the socket otherwise prints an error and returns if unsuccessful
-                if (recv(proxySocket, proxyServerReply, MAX_MESSAGE_LENGTH, 0) < 0) {
-                    puts("recv failed");
+                while (recv(proxySocket, test, MAX_MESSAGE_LENGTH, 0) > 0) {
+                    proxyServerReplyBytes += MAX_MESSAGE_LENGTH * sizeof(char);
+                    proxyServerReply = (char *) realloc(proxyServerReply, proxyServerReplyBytes);
+                    strncat(proxyServerReply, test, MAX_MESSAGE_LENGTH);
+                    bzero(test, MAX_MESSAGE_LENGTH);
                 }
+
+                // Sets the character following the last relevant character to null (null termination will indicate the end of the string)
+                proxyServerReply[proxyServerReplyBytes] = '\0';
 
                 // TODO: Remove
                 puts("Reply received\n");
-                puts(proxyServerReply);
+//                puts(proxyServerReply);
 
                 // Extracts the content length information from the header of the end server's reply
                 char replyLength[MAX_MESSAGE_LENGTH];
@@ -194,9 +204,10 @@ int main() {
 
                 // TODO: Remove
                 printf("\nLENGTH: %d\n", atoi(replyLength));
+                printf("\nLENGTH2: %d\n", proxyServerReplyBytes);
 
                 // Forwards the end server's reply to the client
-                bytes = send(clientChildSocket, proxyServerReply, strlen(proxyServerReply), 0);
+                bytes = send(clientChildSocket, proxyServerReply, proxyServerReplyBytes, 0);
                 if (bytes < 0) {
                     fprintf(stderr, "Server: send() failed!\n");
                 }
@@ -217,7 +228,7 @@ int main() {
             exit(0);
         } else {
             fprintf(stderr, "Server created child process %d to handle that client\n", pid);
-            fprintf(stderr, "Main clientServer process going back to listening for new clients now...\n\n");
+            fprintf(stderr, "Main Server process going back to listening for new clients now...\n\n");
 
             // Parent does not need the socket that communicates with the client
             close(clientChildSocket);
