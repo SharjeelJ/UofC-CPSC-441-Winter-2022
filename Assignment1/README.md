@@ -14,7 +14,8 @@
 
 - macOS 12.2 (21D49)
 - Safari Version 15.3 (17612.4.9.1.5)
-- 127.0.0.1:9090 was used as a system wide HTTP proxy
+- 127.0.0.1:9090 was used as a system-wide HTTP proxy
+- Requests made using the HTTP/1.1 specification
 
 ### URLs Tested
 
