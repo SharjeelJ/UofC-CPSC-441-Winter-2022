@@ -1,18 +1,21 @@
+/* This file contains modified code from the following source(s):
+ * https://www.binarytides.com/socket-programming-c-linux-tutorial/ (Socket Programming in C on Linux provided by the Professor under Useful Links on the course page)
+ * http://pages.cpsc.ucalgary.ca/~carey/CPSC441/ass0/mypal-server.c (Professor's palindrome checking server)
+*/
+
 #include <cstdio>
 #include <cstdlib>
 #include <unistd.h>
-#include <netinet/in.h>
-#include <csignal>
 #include <cstring>
 #include <arpa/inet.h>
-#include <regex.h>
 #include <netdb.h>
 
-#define MAX_MESSAGE_LENGTH 1024
+// Global static variables
+#define ARRAY_SIZE 1024
 #define PROXY_SERVER_PORT 9090
 
-// Global variables
-int clientChildSocket;
+// Creates a socket that will be used by the fork to allow the client to communicate with the proxy
+int clientSocket;
 
 // Returns the substring obtained from the first passed in string where the second passed in string is the start boundary and third passed in string is the end boundary (only returns the string between the start and end boundaries)
 char *customSubstring(char *originalString, const char *startSubstringTerm, const char *endSubstringTerm) {
@@ -29,7 +32,7 @@ char *customSubstring(char *originalString, const char *startSubstringTerm, cons
     int endOffset = endSubstringTermPointer - startSubstringTermPointer - strlen(startSubstringTerm) - 1;
 
     // Creates a char array that will store the result string
-    char resultString[MAX_MESSAGE_LENGTH];
+    char resultString[strlen(originalString)];
 
     // Copies the relevant bytes based on the start and end boundaries from the original string and into the result string
     memcpy(resultString, originalString + startOffset, endOffset);
@@ -44,65 +47,71 @@ char *customSubstring(char *originalString, const char *startSubstringTerm, cons
 // Main function
 int main() {
     // Creates a struct that will store the complete address of the socket being created
-    struct sockaddr_in clientServer = {};
+    struct sockaddr_in proxyAddress = {};
 
-    // Creates char arrays that will store the incoming and outgoing message bytes between the client and the server
-    char clientIncomingMessage[MAX_MESSAGE_LENGTH];
-    char clientOutgoingMessage[MAX_MESSAGE_LENGTH];
+    // Creates char arrays that will store the message between the client and the proxy as well as the message between the proxy and the server that the client would like to talk to
+    char *clientMessage = (char *) malloc(0);
+    char *serverReply = (char *) malloc(0);
 
-    // Initializes the incoming and outgoing message arrays with zeroed bytes
-    bzero(clientIncomingMessage, MAX_MESSAGE_LENGTH);
-    bzero(clientOutgoingMessage, MAX_MESSAGE_LENGTH);
+    // Create a temporary buffer array (will be used to store data before it is moved into to the memory allocated arrays)
+    char temporaryBuffer[ARRAY_SIZE];
 
-    // Creates a socket that will be used by the server to communicate with the client
-    int mainServerSocket;
+    // Initialize int variables to store the number of bytes each char array holds
+    int clientMessageBytes = 0;
+    int serverReplyBytes = 0;
+    int temporaryBufferBytes = 0;
 
-    // Create an int that will store the number of bytes contained within a message between the client and the server
-    int bytes;
+    // Initializes the incoming and outgoing message and temporary buffer arrays with zeroed bytes
+    memset(clientMessage, 0, clientMessageBytes);
+    memset(serverReply, 0, serverReplyBytes);
+    memset(temporaryBuffer, 0, ARRAY_SIZE);
 
-    // Stores the PID of a child fork
+    // Creates a socket that will be used by the client to initially communicate with the proxy
+    int proxySocket;
+
+    // Will be used to store the PID of a child fork
     pid_t pid;
 
     // Allocates memory to the location that will store the address of the socket
-    memset(&clientServer, 0, sizeof(clientServer));
+    memset(&proxyAddress, 0, sizeof(proxyAddress));
 
     // Sets the socket address family to IPv4
-    clientServer.sin_family = AF_INET;
+    proxyAddress.sin_family = AF_INET;
 
     // Sets the port number that the socket will use
-    clientServer.sin_port = htons(PROXY_SERVER_PORT);
+    proxyAddress.sin_port = htons(PROXY_SERVER_PORT);
 
     // Sets the complete IP address that the socket will use
-    clientServer.sin_addr.s_addr = htonl(INADDR_ANY);
+    proxyAddress.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    // Creates a socket that will be used to communicate with the server by the client otherwise prints an error and returns if unsuccessful
-    mainServerSocket = socket(PF_INET, SOCK_STREAM, 0);
-    if (mainServerSocket == -1) {
-        fprintf(stderr, "Server: socket() call failed!\n");
+    // Creates a socket that will be used to communicate between the proxy and the client otherwise prints an error and returns if unsuccessful
+    proxySocket = socket(PF_INET, SOCK_STREAM, 0);
+    if (proxySocket == -1) {
+        fprintf(stderr, "Proxy Server: socket() failed!\n");
         exit(1);
     }
 
     // Binds the specific address and port number to the socket otherwise prints an error and returns if unsuccessful
-    if (bind(mainServerSocket, (struct sockaddr *) &clientServer, sizeof(struct sockaddr_in)) == -1) {
-        fprintf(stderr, "Server: bind() call failed!\n");
+    if (bind(proxySocket, (struct sockaddr *) &proxyAddress, sizeof(struct sockaddr_in)) == -1) {
+        fprintf(stderr, "Proxy Server: bind() failed!\n");
         exit(1);
     }
 
-    // Listens on the socket for incoming client connections
-    if (listen(mainServerSocket, 5) == -1) {
-        fprintf(stderr, "Server: listen() call failed!\n");
+    // Listens on the socket for an incoming client connection
+    if (listen(proxySocket, 5) == -1) {
+        fprintf(stderr, "Proxy Server: listen() failed!\n");
         exit(1);
     }
 
-    fprintf(stderr, "Hello there! I am a server for a clown proxy!!\n");
-    fprintf(stderr, "I am running on TCP port %d for you...\n\n", PROXY_SERVER_PORT);
+    // Prints out the welcome message and TCP port number that the proxy is operating on
+    fprintf(stderr, "Clown proxy server running on TCP port %d...\n\n", PROXY_SERVER_PORT);
 
     // Loops forever to handle client requests
-    for (;;) {
-        // Accepts an incoming socket connection request
-        clientChildSocket = accept(mainServerSocket, NULL, NULL);
-        if (clientChildSocket == -1) {
-            fprintf(stderr, "Server: accept() call failed!\n");
+    while (true) {
+        // Accepts an incoming socket connection request from the client
+        clientSocket = accept(proxySocket, NULL, NULL);
+        if (clientSocket == -1) {
+            fprintf(stderr, "Proxy Server: accept() failed!\n");
             exit(1);
         }
 
@@ -111,127 +120,128 @@ int main() {
 
         // Only proceeds further if the fork creation was successful (0 is returned)
         if (pid < 0) {
-            fprintf(stderr, "Server: fork() call failed! OMG!!\n");
+            fprintf(stderr, "Proxy Server: fork() failed!\n");
             exit(1);
         } else if (pid == 0) {
             // Closes the inherited socket from the parent as the child does not need it
-            close(mainServerSocket);
+            close(proxySocket);
 
-            // Receives the incoming message from the client and stores it
-            bytes = recv(clientChildSocket, clientIncomingMessage, MAX_MESSAGE_LENGTH, 0);
+            // Receives the client's message using the socket
+            memset(temporaryBuffer, 0, ARRAY_SIZE);
+            temporaryBufferBytes = recv(clientSocket, temporaryBuffer, ARRAY_SIZE, 0);
+            while (temporaryBufferBytes > 0) {
+                // Increments the int keeping track of the number of bytes being stored in the memory allocated array
+                clientMessageBytes += temporaryBufferBytes;
 
-            // Loops through the entire message
-            while (bytes > 0) {
-                printf("Server's child process received %d bytes: '%s'\n", bytes, clientIncomingMessage);
+                // Adjusts the memory allocated array to now be of the newly computed size
+                clientMessage = (char *) realloc(clientMessage, clientMessageBytes);
 
-                // Extracts the host information from the header of the client's message
-                char host[MAX_MESSAGE_LENGTH];
-                strcpy(host, customSubstring(clientIncomingMessage, "Host: ", "\n"));
+                // Copies the data from the temporary buffer array into the memory allocated array
+                memcpy(clientMessage + clientMessageBytes - temporaryBufferBytes, temporaryBuffer,
+                       temporaryBufferBytes);
 
-                // Creates a struct that will store the complete address of the socket being created
-                struct sockaddr_in proxyServer = {};
+                // Resets the temporary buffer
+                memset(temporaryBuffer, 0, temporaryBufferBytes);
 
-                // Creates a char array that will store the reply the server receives from destination that the client would like to talk to
-                char *proxyServerReply = (char *) malloc(1);
-                int proxyServerReplyBytes = 1;
+                // Breaks the loop if the entire request has been received (checks for the double CRLF at the end of a HTTP request)
+                if (strstr(clientMessage, "\r\n\r\n") != NULL)
+                    break;
 
-                // Creates a socket that will be used by the server to communicate with the end server
-                int proxySocket = socket(AF_INET, SOCK_STREAM, 0);
-                if (proxySocket == -1) {
-                    printf("Could not create socket");
-                }
-
-                // Creates a pointer that will store the IP address of the end server
-                char *IPbuffer;
-
-                // Creates a struct that will allow us to get the IP address of the end server using its host name (using netdb.h)
-                struct hostent *host_entry;
-
-                // Gets the IP address of the end server using its host name
-                host_entry = gethostbyname(host);
-
-                // Converts the IP address into an ASCII string and stores it
-                IPbuffer = inet_ntoa(*((struct in_addr *) host_entry->h_addr_list[0]));
-
-                // TODO: Remove
-                printf("Host IP: %s\n", IPbuffer);
-
-                // Sets the complete IP address that the socket will use
-                proxyServer.sin_addr.s_addr = inet_addr(IPbuffer);
-
-                // Sets the socket address family to IPv4
-                proxyServer.sin_family = AF_INET;
-
-                // Sets the port number that the socket will use
-                proxyServer.sin_port = htons(80);
-
-                // Connects to the end Server
-                if (connect(proxySocket, (struct sockaddr *) &proxyServer, sizeof(proxyServer)) < 0) {
-                    puts("connect error");
-                    return 1;
-                }
-
-                // Sends the client's message using the socket to the end server otherwise prints an error and returns if unsuccessful
-                if (send(proxySocket, clientIncomingMessage, strlen(clientIncomingMessage), 0) < 0) {
-                    puts("Send failed");
-                    return 1;
-                }
-
-                // TODO: Remove
-                puts("Data Send\n");
-
-                // Creates a temporary buffer to hold the first chunk of data being received from the server
-                char test[MAX_MESSAGE_LENGTH];
-
-                // Receives the reply using the socket otherwise prints an error and returns if unsuccessful
-                while (recv(proxySocket, test, MAX_MESSAGE_LENGTH, 0) > 0) {
-                    proxyServerReplyBytes += MAX_MESSAGE_LENGTH * sizeof(char);
-                    proxyServerReply = (char *) realloc(proxyServerReply, proxyServerReplyBytes);
-                    strncat(proxyServerReply, test, MAX_MESSAGE_LENGTH);
-                    bzero(test, MAX_MESSAGE_LENGTH);
-                }
-
-                // Sets the character following the last relevant character to null (null termination will indicate the end of the string)
-                proxyServerReply[proxyServerReplyBytes] = '\0';
-
-                // TODO: Remove
-                puts("Reply received\n");
-//                puts(proxyServerReply);
-
-                // Extracts the content length information from the header of the end server's reply
-                char replyLength[MAX_MESSAGE_LENGTH];
-                strcpy(replyLength, customSubstring(proxyServerReply, "Content-Length: ", "\n"));
-
-                // TODO: Remove
-                printf("\nLENGTH: %d\n", atoi(replyLength));
-                printf("\nLENGTH2: %d\n", proxyServerReplyBytes);
-
-                // Forwards the end server's reply to the client
-                bytes = send(clientChildSocket, proxyServerReply, proxyServerReplyBytes, 0);
-                if (bytes < 0) {
-                    fprintf(stderr, "Server: send() failed!\n");
-                }
-
-                // Closes the socket with the end server
-                close(proxySocket);
-
-                // Clears out the message arrays
-                bzero(clientIncomingMessage, MAX_MESSAGE_LENGTH);
-                bzero(clientOutgoingMessage, MAX_MESSAGE_LENGTH);
-
-                // Checks to see if there is any more incoming messages from the client
-                bytes = recv(clientChildSocket, clientIncomingMessage, MAX_MESSAGE_LENGTH, 0);
+                // Updates the temporary buffer and the int keeping track of it for the next loop iteration (in case there is more to receive than the temporary buffer could hold)
+                temporaryBufferBytes = recv(clientSocket, temporaryBuffer, ARRAY_SIZE, 0);
             }
 
+            // Extracts the host information from the header of the client's message
+            char serverHost[ARRAY_SIZE];
+            strcpy(serverHost, customSubstring(clientMessage, "Host: ", "\n"));
+
+            // Creates a struct that will store the complete address of the socket being created
+            struct sockaddr_in serverAddress = {};
+
+            // Creates a socket that will be used by the proxy to communicate with the server that the client would like to talk to
+            int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+            if (serverSocket == -1) {
+                fprintf(stderr, "Proxy Server: socket() failed!\n");
+                exit(1);
+            }
+
+            // Creates a pointer that will store the IP address of the server
+            char *serverIP;
+
+            // Creates a struct that will allow us to get the IP address of the end server using its host name (using netdb.h)
+            struct hostent *hostData;
+
+            // Gets the IP address of the server using its host name
+            hostData = gethostbyname(serverHost);
+
+            // Converts the IP address into an ASCII string and stores it
+            serverIP = inet_ntoa(*((struct in_addr *) hostData->h_addr_list[0]));
+
+            // Sets the complete IP address that the socket will use
+            serverAddress.sin_addr.s_addr = inet_addr(serverIP);
+
+            // Sets the socket address family to IPv4
+            serverAddress.sin_family = AF_INET;
+
+            // Sets the port number that the socket will use
+            serverAddress.sin_port = htons(80);
+
+            // Connects to the server
+            if (connect(serverSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0) {
+                fprintf(stderr, "Proxy Server: connect() failed!\n");
+                exit(1);
+            }
+
+            // Sends the client's message using the socket to the server otherwise prints an error and returns if unsuccessful
+            if (send(serverSocket, clientMessage, clientMessageBytes, 0) < 0) {
+                fprintf(stderr, "Proxy Server: send() failed!\n");
+                exit(1);
+            }
+
+            // Receives the server's reply using the socket
+            memset(temporaryBuffer, 0, temporaryBufferBytes);
+            temporaryBufferBytes = recv(serverSocket, temporaryBuffer, ARRAY_SIZE, 0);
+            while (temporaryBufferBytes > 0) {
+                // Increments the int keeping track of the number of bytes being stored in the memory allocated array
+                serverReplyBytes += temporaryBufferBytes;
+
+                // Adjusts the memory allocated array to now be of the newly computed size
+                serverReply = (char *) realloc(serverReply, serverReplyBytes);
+
+                // Copies the data from the temporary buffer array into the memory allocated array
+                memcpy(serverReply + serverReplyBytes - temporaryBufferBytes, temporaryBuffer, temporaryBufferBytes);
+
+                // Resets the temporary buffer
+                memset(temporaryBuffer, 0, temporaryBufferBytes);
+
+                // Updates the temporary buffer and the int keeping track of it for the next loop iteration (in case there is more to receive than the temporary buffer could hold)
+                temporaryBufferBytes = recv(serverSocket, temporaryBuffer, ARRAY_SIZE, 0);
+            }
+
+            // Sends the server's reply to the client
+            if (send(clientSocket, serverReply, serverReplyBytes, 0) < 0) {
+                fprintf(stderr, "Proxy Server: send() failed!\n");
+                exit(1);
+            }
+
+            // Frees up the memory allocated by the char arrays
+            free(clientMessage);
+            free(serverReply);
+
+            // Closes the socket with the server
+            close(serverSocket);
+
+            // Closes the socket with the client and kills the fork
             fprintf(stderr, "Child process received nothing, so it is exiting now\n");
-            close(clientChildSocket);
+            close(clientSocket);
             exit(0);
         } else {
-            fprintf(stderr, "Server created child process %d to handle that client\n", pid);
-            fprintf(stderr, "Main Server process going back to listening for new clients now...\n\n");
+            // Informs the user of the child's PID (that will be handling the client and proxy connection) and that the proxy server will now continue to listen for new requests
+            fprintf(stderr, "Proxy Server created child process %d to handle the client\n", pid);
+            fprintf(stderr, "Proxy Server process going back to listening for new clients now...\n\n");
 
             // Parent does not need the socket that communicates with the client
-            close(clientChildSocket);
+            close(clientSocket);
         }
     }
 }
