@@ -19,7 +19,8 @@
 int clientSocket;
 
 // Returns the substring obtained from the first passed in string where the second passed in string is the start boundary and third passed in string is the end boundary (only returns the string between the start and end boundaries)
-char *customSubstring(char *originalString, const char *startSubstringTerm, const char *endSubstringTerm) {
+char *customSubstring(char *originalString, char *resultString, const char *startSubstringTerm,
+                      const char *endSubstringTerm) {
     // Finds the pointer position of the second passed in string (start boundary) in the first passed in string (original string)
     char *startSubstringTermPointer = strstr(originalString, startSubstringTerm);
 
@@ -32,8 +33,8 @@ char *customSubstring(char *originalString, const char *startSubstringTerm, cons
     // Calculates the offset necessary to chop off the characters after and including the end boundary
     int endOffset = endSubstringTermPointer - startSubstringTermPointer - strlen(startSubstringTerm);
 
-    // Creates a char array that will store the result string
-    char resultString[ARRAY_SIZE];
+    // Resets the result char array with zeroed bytes
+    memset(resultString, 0, ARRAY_SIZE);
 
     // Copies the relevant bytes based on the start and end boundaries from the original string and into the result string
     memcpy(resultString, originalString + startOffset, endOffset);
@@ -66,6 +67,9 @@ int main() {
     memset(clientMessage, 0, clientMessageBytes);
     memset(serverReply, 0, serverReplyBytes);
     memset(temporaryBuffer, 0, ARRAY_SIZE);
+
+    // Initialize a char array that will store the result obtained by the customSubstring function
+    char customSubstringResult[ARRAY_SIZE];
 
     // Creates a socket that will be used by the client to initially communicate with the proxy
     int proxySocket;
@@ -154,7 +158,7 @@ int main() {
 
             // Extracts the host information from the header of the client's message
             char serverHost[ARRAY_SIZE];
-            strcpy(serverHost, customSubstring(clientMessage, "Host: ", "\r\n"));
+            strcpy(serverHost, customSubstring(clientMessage, customSubstringResult, "Host: ", "\r\n"));
 
             // Creates a struct that will store the complete address of the socket being created
             struct sockaddr_in serverAddress = {};
@@ -202,7 +206,7 @@ int main() {
 
             // Store the full url that the client is requesting
             char fullURL[ARRAY_SIZE];
-            strcpy(fullURL, customSubstring(clientMessage, "GET ", " HTTP/1."));
+            strcpy(fullURL, customSubstring(clientMessage, customSubstringResult, "GET ", " HTTP/1."));
 
             // Creates a HEAD request to request the header of the url that the client is requesting
             char *headerRequest;
@@ -226,7 +230,7 @@ int main() {
 
             // Stores the Content-Type data from the header
             char contentType[ARRAY_SIZE];
-            strcpy(contentType, customSubstring(header, "Content-Type: ", "\r\n"));
+            strcpy(contentType, customSubstring(header, customSubstringResult, "Content-Type: ", "\r\n"));
 
             // If the Content-Type indicates that the requested page is html then performs the text replacement
             if (strstr(contentType, "text/html") != NULL) {
