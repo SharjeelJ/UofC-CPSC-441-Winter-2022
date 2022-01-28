@@ -267,11 +267,14 @@ int main() {
                     temporaryBufferBytes = recv(serverSocket, temporaryBuffer, ARRAY_SIZE, 0);
                 }
 
+                // Stores the pointer address for the start of the body (to prevent tampering with the header)
+                char *replyBodyPointer = strstr(serverReply, "\r\n\r\n");
+
                 // Stores the pointer address of the first instance of "Happy" (otherwise null) in the server's reply
-                char *happyPointer = strstr(serverReply, "Happy");
+                char *happyPointer = strstr(replyBodyPointer, "Happy");
 
                 // Stores the pointer address of a string containing "Silly"
-                char *sillyPointer = "Silly";
+                char sillyPointer[] = "Silly";
 
                 // Replaces all instances of "Happy" with "Silly" in the html
                 while (happyPointer != NULL) {
@@ -279,7 +282,7 @@ int main() {
                     memcpy(happyPointer, sillyPointer, 5);
 
                     // Updates the pointer address to contain the next instance of "Happy" (otherwise null)
-                    happyPointer = strstr(serverReply, "Happy");
+                    happyPointer = strstr(replyBodyPointer, "Happy");
                 }
             }
                 // If the Content-Type indicates that the requested page is a jpeg then returns a redirect

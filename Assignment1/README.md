@@ -8,6 +8,7 @@
    Clown-Proxy; ./Clown-Proxy"
 4) Set your browser to use an HTTP proxy with the server address being 127.0.0.1 and port being 9090
 5) Perform testing as desired (refer to the URLs Tested section)
+6) Press Control + C to terminate the program and make sure to revert changes made in Step 4
 
 ### Testing Environment
 
