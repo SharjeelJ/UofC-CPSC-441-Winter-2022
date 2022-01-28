@@ -9,9 +9,10 @@
 #include <cstring>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <ctime>
 
 // Global static variables
-#define ARRAY_SIZE 1024
+#define ARRAY_SIZE 2048
 #define PROXY_SERVER_PORT 9090
 
 // Creates a socket that will be used by the fork to allow the client to communicate with the proxy
@@ -29,16 +30,16 @@ char *customSubstring(char *originalString, const char *startSubstringTerm, cons
     int startOffset = startSubstringTermPointer - originalString + strlen(startSubstringTerm);
 
     // Calculates the offset necessary to chop off the characters after and including the end boundary
-    int endOffset = endSubstringTermPointer - startSubstringTermPointer - strlen(startSubstringTerm) - 1;
+    int endOffset = endSubstringTermPointer - startSubstringTermPointer - strlen(startSubstringTerm);
 
     // Creates a char array that will store the result string
-    char resultString[strlen(originalString)];
+    char resultString[ARRAY_SIZE];
 
     // Copies the relevant bytes based on the start and end boundaries from the original string and into the result string
     memcpy(resultString, originalString + startOffset, endOffset);
 
     // Sets the character following the last relevant character to null (null termination will indicate the end of the string)
-    resultString[endOffset + 1] = '\0';
+    resultString[endOffset] = '\0';
 
     // Returns the result string back to the calling code
     return resultString;
@@ -153,10 +154,17 @@ int main() {
 
             // Extracts the host information from the header of the client's message
             char serverHost[ARRAY_SIZE];
-            strcpy(serverHost, customSubstring(clientMessage, "Host: ", "\n"));
+            strcpy(serverHost, customSubstring(clientMessage, "Host: ", "\r\n"));
 
             // Creates a struct that will store the complete address of the socket being created
             struct sockaddr_in serverAddress = {};
+
+            // Creates a socket that will be used by the proxy to communicate with the server that the client would like to talk to
+            int serverHeaderSocket = socket(AF_INET, SOCK_STREAM, 0);
+            if (serverHeaderSocket == -1) {
+                fprintf(stderr, "Proxy Server: socket() failed!\n");
+                exit(1);
+            }
 
             // Creates a socket that will be used by the proxy to communicate with the server that the client would like to talk to
             int serverSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -187,35 +195,142 @@ int main() {
             serverAddress.sin_port = htons(80);
 
             // Connects to the server
-            if (connect(serverSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0) {
+            if (connect(serverHeaderSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0) {
                 fprintf(stderr, "Proxy Server: connect() failed!\n");
                 exit(1);
             }
 
-            // Sends the client's message using the socket to the server otherwise prints an error and returns if unsuccessful
-            if (send(serverSocket, clientMessage, clientMessageBytes, 0) < 0) {
+            // Store the full url that the client is requesting
+            char fullURL[ARRAY_SIZE];
+            strcpy(fullURL, customSubstring(clientMessage, "GET ", " HTTP/1."));
+
+            // Creates a HEAD request to request the header of the url that the client is requesting
+            char *headerRequest;
+            asprintf(&headerRequest, "HEAD %s HTTP/1.1\r\nHost: pages.cpsc.ucalgary.ca\r\n\r\n", fullURL);
+
+            // Sends the head request using the socket to the server otherwise prints an error and returns if unsuccessful
+            if (send(serverHeaderSocket, headerRequest, ARRAY_SIZE, 0) < 0) {
                 fprintf(stderr, "Proxy Server: send() failed!\n");
                 exit(1);
             }
 
-            // Receives the server's reply using the socket
-            memset(temporaryBuffer, 0, temporaryBufferBytes);
-            temporaryBufferBytes = recv(serverSocket, temporaryBuffer, ARRAY_SIZE, 0);
-            while (temporaryBufferBytes > 0) {
-                // Increments the int keeping track of the number of bytes being stored in the memory allocated array
-                serverReplyBytes += temporaryBufferBytes;
+            // Receives the header using the socket to the server otherwise prints an error and returns if unsuccessful
+            char header[ARRAY_SIZE];
+            if (recv(serverHeaderSocket, header, ARRAY_SIZE, 0) < 0) {
+                fprintf(stderr, "Proxy Server: send() failed!\n");
+                exit(1);
+            }
 
-                // Adjusts the memory allocated array to now be of the newly computed size
-                serverReply = (char *) realloc(serverReply, serverReplyBytes);
+            // Closes the header socket with the server
+            close(serverHeaderSocket);
 
-                // Copies the data from the temporary buffer array into the memory allocated array
-                memcpy(serverReply + serverReplyBytes - temporaryBufferBytes, temporaryBuffer, temporaryBufferBytes);
+            // Stores the Content-Type data from the header
+            char contentType[ARRAY_SIZE];
+            strcpy(contentType, customSubstring(header, "Content-Type: ", "\r\n"));
 
-                // Resets the temporary buffer
+            // If the Content-Type indicates that the requested page is html then performs the text replacement
+            if (strstr(contentType, "text/html") != NULL) {
+                // Connects to the server
+                if (connect(serverSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0) {
+                    fprintf(stderr, "Proxy Server: connect() failed!\n");
+                    exit(1);
+                }
+
+                // Sends the client's message using the socket to the server otherwise prints an error and returns if unsuccessful
+                if (send(serverSocket, clientMessage, clientMessageBytes, 0) < 0) {
+                    fprintf(stderr, "Proxy Server: send() failed!\n");
+                    exit(1);
+                }
+
+                // Receives the server's reply using the socket
                 memset(temporaryBuffer, 0, temporaryBufferBytes);
-
-                // Updates the temporary buffer and the int keeping track of it for the next loop iteration (in case there is more to receive than the temporary buffer could hold)
                 temporaryBufferBytes = recv(serverSocket, temporaryBuffer, ARRAY_SIZE, 0);
+                while (temporaryBufferBytes > 0) {
+                    // Increments the int keeping track of the number of bytes being stored in the memory allocated array
+                    serverReplyBytes += temporaryBufferBytes;
+
+                    // Adjusts the memory allocated array to now be of the newly computed size
+                    serverReply = (char *) realloc(serverReply, serverReplyBytes);
+
+                    // Copies the data from the temporary buffer array into the memory allocated array
+                    memcpy(serverReply + serverReplyBytes - temporaryBufferBytes, temporaryBuffer,
+                           temporaryBufferBytes);
+
+                    // Resets the temporary buffer
+                    memset(temporaryBuffer, 0, temporaryBufferBytes);
+
+                    // Updates the temporary buffer and the int keeping track of it for the next loop iteration (in case there is more to receive than the temporary buffer could hold)
+                    temporaryBufferBytes = recv(serverSocket, temporaryBuffer, ARRAY_SIZE, 0);
+                }
+
+                // Stores the pointer address of the first instance of "Happy" (otherwise null) in the server's reply
+                char *happyPointer = strstr(serverReply, "Happy");
+
+                // Stores the pointer address of a string containing "Silly"
+                char *sillyPointer = "Silly";
+
+                // Replaces all instances of "Happy" with "Silly" in the html
+                while (happyPointer != NULL) {
+                    // Replaces the memory at the pointer location containing "Happy" with the memory from the pointer position containing "Silly"
+                    memcpy(happyPointer, sillyPointer, 5);
+
+                    // Updates the pointer address to contain the next instance of "Happy" (otherwise null)
+                    happyPointer = strstr(serverReply, "Happy");
+                }
+            }
+                // If the Content-Type indicates that the requested page is a jpeg then returns a redirect
+            else if (strstr(contentType, "image/jpeg") != NULL) {
+                // Generates a random number between 0 and 1 and uses that as the input for a switch statement that assigns a clown image via a redirect for the current jpeg
+                char *redirectURL;
+                srand(time(0));
+                switch (rand() % 2) {
+                    case 0:
+                        asprintf(&redirectURL, "HTTP/1.1 302 Found\r\nLocation: %s\r\n\r\n",
+                                 "http://pages.cpsc.ucalgary.ca/~carey/CPSC441/ass1/clown1.png");
+                        break;
+                    case 1:
+                        asprintf(&redirectURL, "HTTP/1.1 302 Found\r\nLocation: %s\r\n\r\n",
+                                 "http://pages.cpsc.ucalgary.ca/~carey/CPSC441/ass1/clown2.png");
+                        break;
+                }
+
+                // Stores fake reply from the server indicating that a URL redirect needs to occur for the requested jpeg
+                serverReplyBytes = strlen(redirectURL);
+                serverReply = (char *) realloc(serverReply, serverReplyBytes);
+                memcpy(serverReply, redirectURL, serverReplyBytes);
+            } else {
+                // Connects to the server
+                if (connect(serverSocket, (struct sockaddr *) &serverAddress, sizeof(serverAddress)) < 0) {
+                    fprintf(stderr, "Proxy Server: connect() failed!\n");
+                    exit(1);
+                }
+
+                // Sends the client's message using the socket to the server otherwise prints an error and returns if unsuccessful
+                if (send(serverSocket, clientMessage, clientMessageBytes, 0) < 0) {
+                    fprintf(stderr, "Proxy Server: send() failed!\n");
+                    exit(1);
+                }
+
+                // Receives the server's reply using the socket
+                memset(temporaryBuffer, 0, temporaryBufferBytes);
+                temporaryBufferBytes = recv(serverSocket, temporaryBuffer, ARRAY_SIZE, 0);
+                while (temporaryBufferBytes > 0) {
+                    // Increments the int keeping track of the number of bytes being stored in the memory allocated array
+                    serverReplyBytes += temporaryBufferBytes;
+
+                    // Adjusts the memory allocated array to now be of the newly computed size
+                    serverReply = (char *) realloc(serverReply, serverReplyBytes);
+
+                    // Copies the data from the temporary buffer array into the memory allocated array
+                    memcpy(serverReply + serverReplyBytes - temporaryBufferBytes, temporaryBuffer,
+                           temporaryBufferBytes);
+
+                    // Resets the temporary buffer
+                    memset(temporaryBuffer, 0, temporaryBufferBytes);
+
+                    // Updates the temporary buffer and the int keeping track of it for the next loop iteration (in case there is more to receive than the temporary buffer could hold)
+                    temporaryBufferBytes = recv(serverSocket, temporaryBuffer, ARRAY_SIZE, 0);
+                }
             }
 
             // Sends the server's reply to the client
