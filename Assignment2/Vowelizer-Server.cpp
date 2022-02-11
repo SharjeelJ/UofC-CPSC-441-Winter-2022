@@ -117,26 +117,44 @@ int main() {
             tcpCompleteMessageBytes = recv(clientSocketTCP, tcpCompleteMessage, MAX_MESSAGE_SIZE, 0);
 
             while (tcpCompleteMessageBytes > 0) {
+                memset(udpSplitMessage, ' ', tcpCompleteMessageBytes);
+                memset(tcpSplitMessage, ' ', tcpCompleteMessageBytes);
+                for (int counter = 0; counter < tcpCompleteMessageBytes; counter++) {
+                    switch (tcpCompleteMessage[counter]) {
+                        case 'A':
+                        case 'E':
+                        case 'I':
+                        case 'O':
+                        case 'U':
+                        case 'a':
+                        case 'e':
+                        case 'i':
+                        case 'o':
+                        case 'u':
+                            udpSplitMessage[counter] = tcpCompleteMessage[counter];
+                            break;
+                        default:
+                            tcpSplitMessage[counter] = tcpCompleteMessage[counter];
+                            break;
+                    }
+                }
+
                 // Sends the server's reply to the client
-                sprintf(tcpSplitMessage, "TCP REPLY");
                 tcpSplitMessageBytes = strlen(tcpSplitMessage);
                 if (send(clientSocketTCP, tcpSplitMessage, tcpSplitMessageBytes, 0) < 0) {
                     fprintf(stderr, "Server: TCP send() failed!\n");
                     exit(1);
                 }
 
-                int len = sizeof(clientAddress);
-                char test[MAX_MESSAGE_SIZE];
-                recvfrom(serverSocketUDP, test, MAX_MESSAGE_SIZE,
-                         MSG_WAITALL, (struct sockaddr *) &clientAddress,
-                         (socklen_t *) &len);
+                int addressLength = sizeof(clientAddress);
+                char temp[MAX_MESSAGE_SIZE];
+                recvfrom(serverSocketUDP, temp, MAX_MESSAGE_SIZE, MSG_WAITALL, (struct sockaddr *) &clientAddress,
+                         (socklen_t *) &addressLength);
 
                 // Sends the server's reply to the client
-                sprintf(udpSplitMessage, "UDP REPLY");
                 udpSplitMessageBytes = strlen(udpSplitMessage);
-                if (sendto(serverSocketUDP, udpSplitMessage, udpSplitMessageBytes,
-                           MSG_CONFIRM, (const struct sockaddr *) &clientAddress,
-                           len) < 0) {
+                if (sendto(serverSocketUDP, udpSplitMessage, udpSplitMessageBytes, MSG_CONFIRM,
+                           (const struct sockaddr *) &clientAddress, addressLength) < 0) {
                     fprintf(stderr, "Server: UDP send() failed!\n");
                     exit(1);
                 }

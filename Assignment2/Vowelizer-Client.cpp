@@ -83,6 +83,13 @@ int main() {
         return -1;
     }
 
+//    printf("\nHELLO WORLD1!\n");
+//    struct sockaddr_in client;
+//    socklen_t clientsz = sizeof(client);
+//    getsockname(customSocketUDP, (struct sockaddr *) &client, &clientsz);
+//    printf("[%s:%u] > ", inet_ntoa(client.sin_addr), ntohs(client.sin_port));
+//    printf("\nHELLO WORLD2!\n");
+
     int userMenuSelection;
     char userInput;
 
@@ -126,16 +133,14 @@ int main() {
             if (tcpSplitMessageBytes > 0) {
                 /* make sure the message is null-terminated in C */
                 tcpSplitMessage[tcpSplitMessageBytes] = '\0';
-                printf("Answer from server: ");
-                printf("`%s'\n", tcpSplitMessage);
+                printf("Server sent %d bytes of non-vowels using TCP: %s\n", tcpCompleteMessageBytes, tcpSplitMessage);
             } else {
                 /* an error condition if the server ends unexpectedly */
                 printf("TCP Socket Received Nothing!\n");
                 continue;
             }
 
-            sendto(customSocketUDP, "TEST", strlen("TEST"),
-                   MSG_CONFIRM, (const struct sockaddr *) &socketAddress,
+            sendto(customSocketUDP, " ", strlen(" "), MSG_CONFIRM, (const struct sockaddr *) &socketAddress,
                    sizeof(socketAddress));
 
             // Receives the reply using the socket otherwise prints an error and returns if unsuccessful
@@ -152,8 +157,7 @@ int main() {
             if (udpSplitMessageBytes > 0) {
                 /* make sure the message is null-terminated in C */
                 udpSplitMessage[udpSplitMessageBytes] = '\0';
-                printf("Answer from server: ");
-                printf("`%s'\n", udpSplitMessage);
+                printf("Server sent %d bytes of vowels using UDP    : %s\n", udpSplitMessageBytes, udpSplitMessage);
             } else {
                 /* an error condition if the server ends unexpectedly */
                 printf("UDP Socket Received Nothing!\n");
