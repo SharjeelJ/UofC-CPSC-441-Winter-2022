@@ -47,9 +47,9 @@ int main() {
     int udpMessageBytes = 0;
 
     // Initializes the incoming and outgoing message arrays with zeroed bytes
-    memset(tcpIncomingMessage, 0, MAX_MESSAGE_SIZE);
-    memset(tcpOutgoingMessage, 0, MAX_MESSAGE_SIZE);
-    memset(udpMessage, 0, MAX_MESSAGE_SIZE);
+    bzero(tcpIncomingMessage, MAX_MESSAGE_SIZE);
+    bzero(tcpOutgoingMessage, MAX_MESSAGE_SIZE);
+    bzero(udpMessage, MAX_MESSAGE_SIZE);
 
     // Clears the memory for the locations that will store the addresses
     memset(&serverAddress, 0, sizeof(serverAddress));
@@ -113,6 +113,16 @@ int main() {
     int userMenuSelection = -1;
     char userInput;
     while (userMenuSelection != EXIT_VALUE) {
+        // Clears the incoming and outgoing message arrays with zeroed bytes
+        bzero(tcpIncomingMessage, MAX_MESSAGE_SIZE);
+        bzero(tcpOutgoingMessage, MAX_MESSAGE_SIZE);
+        bzero(udpMessage, MAX_MESSAGE_SIZE);
+
+        // Resets the variables storing the number of bytes each char array holds
+        tcpIncomingMessageBytes = 0;
+        tcpOutgoingMessageBytes = 0;
+        udpMessageBytes = 0;
+
         // Prompts the user for a menu selection and stores it
         printMenu();
         scanf("%d", &userMenuSelection);
@@ -198,6 +208,9 @@ int main() {
 
             // Null terminates the message
             tcpOutgoingMessage[tcpOutgoingMessageBytes] = '\0';
+
+            // Required for next text to be print out
+            printf("");
 
             // Gets and stores the message that needs to be sent to the server from the user
             printf("Enter vowel part of the message to envowel    : ");

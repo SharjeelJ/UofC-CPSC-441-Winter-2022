@@ -39,9 +39,9 @@ int main() {
     int udpMessageBytes = 0;
 
     // Initializes the incoming and outgoing message arrays with zeroed bytes
-    memset(tcpIncomingMessage, 0, MAX_MESSAGE_SIZE);
-    memset(tcpOutgoingMessage, 0, MAX_MESSAGE_SIZE);
-    memset(udpMessage, 0, MAX_MESSAGE_SIZE);
+    bzero(tcpIncomingMessage, MAX_MESSAGE_SIZE);
+    bzero(tcpOutgoingMessage, MAX_MESSAGE_SIZE);
+    bzero(udpMessage, MAX_MESSAGE_SIZE);
 
     // Creates a socket that will be used by the client to initially communicate with the server
     int serverSocketTCP;
@@ -133,12 +133,24 @@ int main() {
             sockaddr_in udpClientAddress = reinterpret_cast<const sockaddr_in &>(clientAddress);
             udpClientAddress.sin_port = htons(udpPortClient);
 
-            // Receives the client's message using the TCP socket
-            bzero(tcpIncomingMessage, MAX_MESSAGE_SIZE);
-            tcpIncomingMessageBytes = recv(clientSocketTCP, tcpIncomingMessage, MAX_MESSAGE_SIZE, 0);
+            // Sets the incoming bytes value to 1 to start the loop
+            tcpIncomingMessageBytes = 1;
 
             // Keeps running until the client disconnects from the TCP socket handling their connection
             while (tcpIncomingMessageBytes > 0) {
+                // Clears the incoming and outgoing message arrays with zeroed bytes
+                bzero(tcpIncomingMessage, MAX_MESSAGE_SIZE);
+                bzero(tcpOutgoingMessage, MAX_MESSAGE_SIZE);
+                bzero(udpMessage, MAX_MESSAGE_SIZE);
+
+                // Resets the variables storing the number of bytes each char array holds
+                tcpIncomingMessageBytes = 0;
+                tcpOutgoingMessageBytes = 0;
+                udpMessageBytes = 0;
+
+                // Receives the client's message using the TCP socket
+                tcpIncomingMessageBytes = recv(clientSocketTCP, tcpIncomingMessage, MAX_MESSAGE_SIZE, 0);
+
                 // Stores the client's menu selection
                 int menuSelection = tcpIncomingMessage[0] - '0';
 
@@ -191,6 +203,35 @@ int main() {
                     // Receives the vowel part over UDP from the client
                     udpMessageBytes = recvfrom(clientSocketUDP, udpMessage, MAX_MESSAGE_SIZE,
                                                MSG_WAITALL, NULL, (socklen_t *) sizeof clientAddress);
+                    if (udpMessageBytes == -1) {
+                        // Sends an error message to the client over TCP
+                        sprintf(tcpOutgoingMessage, "UDP Message Missing!");
+                        tcpOutgoingMessageBytes = strlen(tcpOutgoingMessage);
+                        if (send(clientSocketTCP, tcpOutgoingMessage, tcpOutgoingMessageBytes, 0) < 0) {
+                            printf("TCP Send Failed!\n");
+                            exit(1);
+                        }
+                        continue;
+                    }
+                        // Checks to see if either of the two incoming messages were empty then returns the non-empty one or a blank space if both are empty
+                    else if (tcpIncomingMessageBytes == 0 || udpMessageBytes == 0) {
+                        // Sends the non-empty message (if any) back to the client over TCP otherwise a message with a single space
+                        if (tcpIncomingMessageBytes == 0 && udpMessageBytes != 0)
+                            memcpy(tcpOutgoingMessage, udpMessage, udpMessageBytes);
+                        else if (tcpIncomingMessageBytes != 0 && udpMessageBytes == 0)
+                            memcpy(tcpOutgoingMessage, tcpIncomingMessage, tcpIncomingMessageBytes);
+                        else
+                            sprintf(tcpOutgoingMessage, " ");
+
+                        // Sends the message to the client over TCP
+                        tcpOutgoingMessageBytes = strlen(tcpOutgoingMessage);
+                        if (send(clientSocketTCP, tcpOutgoingMessage, tcpOutgoingMessageBytes, 0) < 0) {
+                            printf("TCP Send Failed!\n");
+                            exit(1);
+                        }
+                        tcpIncomingMessageBytes = 1;
+                        continue;
+                    }
 
                     // Null terminates the message
                     udpMessage[udpMessageBytes] = '\0';
@@ -202,6 +243,8 @@ int main() {
                                 tcpOutgoingMessage[counter] = tcpIncomingMessage[counter];
                             else if (udpMessage[counter] != ' ' && tcpIncomingMessage[counter] == ' ')
                                 tcpOutgoingMessage[counter] = udpMessage[counter];
+                            else
+                                tcpOutgoingMessage[counter] = ' ';
                         }
                     } else {
                         sprintf(tcpOutgoingMessage, "MALFORMED MESSAGE(S) PROVIDED!");
@@ -214,14 +257,6 @@ int main() {
                         exit(1);
                     }
                 }
-
-                // Clears the incoming and outgoing message arrays with zeroed bytes
-                bzero(tcpIncomingMessage, MAX_MESSAGE_SIZE);
-                bzero(tcpOutgoingMessage, MAX_MESSAGE_SIZE);
-                bzero(udpMessage, MAX_MESSAGE_SIZE);
-
-                // Receives the client's message using the TCP socket
-                tcpIncomingMessageBytes = recv(clientSocketTCP, tcpIncomingMessage, MAX_MESSAGE_SIZE, 0);
             }
 
             // Closes the socket with the client and kills the fork
