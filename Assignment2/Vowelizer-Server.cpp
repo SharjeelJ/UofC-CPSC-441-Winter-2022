@@ -22,6 +22,80 @@
 int clientSocketTCP;
 int clientSocketUDP;
 
+// Performs the simple split operation on the passed in arrays
+void simpleSplit(char *completeMessage, char *noVowelMessage, char *vowelMessage) {
+    // Sets both the arrays to contain a blank space string if the string to be devoweled is empty
+    if (strlen(completeMessage) == 0) {
+        sprintf(noVowelMessage, " ");
+        sprintf(vowelMessage, " ");
+    } else
+        // Loops through the entire message and devowels it into two arrays
+        for (int counter = 0; counter < strlen(completeMessage); counter++) {
+            switch (completeMessage[counter]) {
+                case 'A':
+                case 'E':
+                case 'I':
+                case 'O':
+                case 'U':
+                case 'a':
+                case 'e':
+                case 'i':
+                case 'o':
+                case 'u':
+                    noVowelMessage[counter] = ' ';
+                    vowelMessage[counter] = completeMessage[counter];
+                    break;
+                default:
+                    noVowelMessage[counter] = completeMessage[counter];
+                    vowelMessage[counter] = ' ';
+                    break;
+            }
+        }
+}
+
+// Performs the simple merge operation on the passed in arrays
+void simpleMerge(char *completeMessage, char *noVowelMessage, char *vowelMessage) {
+    // Loops through both parts of the message and envowels it into one array
+    if (strlen(noVowelMessage) == 0 && strlen(vowelMessage) == 0)
+        sprintf(completeMessage, " ");
+    else if (strlen(noVowelMessage) == 0 && strlen(vowelMessage) != 0)
+        strcpy(completeMessage, vowelMessage);
+    else if (strlen(noVowelMessage) != 0 && strlen(vowelMessage) == 0)
+        strcpy(completeMessage, noVowelMessage);
+    else if (strlen(noVowelMessage) == strlen(vowelMessage)) {
+        for (int counter = 0; counter < strlen(noVowelMessage); counter++) {
+            if (vowelMessage[counter] == ' ' && noVowelMessage[counter] != ' ')
+                completeMessage[counter] = noVowelMessage[counter];
+            else if (vowelMessage[counter] != ' ' && noVowelMessage[counter] == ' ')
+                completeMessage[counter] = vowelMessage[counter];
+            else
+                completeMessage[counter] = ' ';
+        }
+    } else {
+        sprintf(completeMessage, "MALFORMED MESSAGE(S) PROVIDED!");
+    }
+}
+
+// Performs the advanced split operation on the passed in arrays
+void advancedSplit(char *completeMessage, char *noVowelMessage, char *vowelMessage) {
+
+}
+
+// Performs the advanced merge operation on the passed in arrays
+void advancedMerge(char *completeMessage, char *noVowelMessage, char *vowelMessage) {
+
+}
+
+// Performs the custom split operation on the passed in arrays
+void customSplit(char *completeMessage, char *noVowelMessage, char *vowelMessage) {
+
+}
+
+// Performs the custom merge operation on the passed in arrays
+void customMerge(char *completeMessage, char *noVowelMessage, char *vowelMessage) {
+
+}
+
 // Main function
 int main() {
     // Creates a struct that will store the complete address of the server
@@ -133,11 +207,8 @@ int main() {
             sockaddr_in udpClientAddress = reinterpret_cast<const sockaddr_in &>(clientAddress);
             udpClientAddress.sin_port = htons(udpPortClient);
 
-            // Sets the incoming bytes value to 1 to start the loop
-            tcpIncomingMessageBytes = 1;
-
             // Keeps running until the client disconnects from the TCP socket handling their connection
-            while (tcpIncomingMessageBytes > 0) {
+            while (tcpIncomingMessageBytes >= 0) {
                 // Clears the incoming and outgoing message arrays with zeroed bytes
                 bzero(tcpIncomingMessage, MAX_MESSAGE_SIZE);
                 bzero(tcpOutgoingMessage, MAX_MESSAGE_SIZE);
@@ -160,27 +231,17 @@ int main() {
 
                 // Checks to see if the client specified the devowel option
                 if (menuSelection == DEVOWEL_VALUE) {
-                    // Loops through the entire message and devowels it into two arrays
-                    for (int counter = 0; counter < tcpIncomingMessageBytes; counter++) {
-                        switch (tcpIncomingMessage[counter]) {
-                            case 'A':
-                            case 'E':
-                            case 'I':
-                            case 'O':
-                            case 'U':
-                            case 'a':
-                            case 'e':
-                            case 'i':
-                            case 'o':
-                            case 'u':
-                                tcpOutgoingMessage[counter] = ' ';
-                                udpMessage[counter] = tcpIncomingMessage[counter];
-                                break;
-                            default:
-                                tcpOutgoingMessage[counter] = tcpIncomingMessage[counter];
-                                udpMessage[counter] = ' ';
-                                break;
-                        }
+                    // Calls the appropriate function based on what mode is set
+                    switch (MODE) {
+                        case 0:
+                            simpleSplit(tcpIncomingMessage, tcpOutgoingMessage, udpMessage);
+                            break;
+                        case 1:
+                            advancedSplit(tcpIncomingMessage, tcpOutgoingMessage, udpMessage);
+                            break;
+                        case 2:
+                            customSplit(tcpIncomingMessage, tcpOutgoingMessage, udpMessage);
+                            break;
                     }
 
                     // Sends the non-vowel part over TCP to the client
@@ -213,41 +274,21 @@ int main() {
                         }
                         continue;
                     }
-                        // Checks to see if either of the two incoming messages were empty then returns the non-empty one or a blank space if both are empty
-                    else if (tcpIncomingMessageBytes == 0 || udpMessageBytes == 0) {
-                        // Sends the non-empty message (if any) back to the client over TCP otherwise a message with a single space
-                        if (tcpIncomingMessageBytes == 0 && udpMessageBytes != 0)
-                            memcpy(tcpOutgoingMessage, udpMessage, udpMessageBytes);
-                        else if (tcpIncomingMessageBytes != 0 && udpMessageBytes == 0)
-                            memcpy(tcpOutgoingMessage, tcpIncomingMessage, tcpIncomingMessageBytes);
-                        else
-                            sprintf(tcpOutgoingMessage, " ");
-
-                        // Sends the message to the client over TCP
-                        tcpOutgoingMessageBytes = strlen(tcpOutgoingMessage);
-                        if (send(clientSocketTCP, tcpOutgoingMessage, tcpOutgoingMessageBytes, 0) < 0) {
-                            printf("TCP Send Failed!\n");
-                            exit(1);
-                        }
-                        tcpIncomingMessageBytes = 1;
-                        continue;
-                    }
 
                     // Null terminates the message
                     udpMessage[udpMessageBytes] = '\0';
 
-                    // Loops through the both parts of the message and envowels it into one array
-                    if (tcpIncomingMessageBytes == udpMessageBytes) {
-                        for (int counter = 0; counter < tcpIncomingMessageBytes; counter++) {
-                            if (udpMessage[counter] == ' ' && tcpIncomingMessage[counter] != ' ')
-                                tcpOutgoingMessage[counter] = tcpIncomingMessage[counter];
-                            else if (udpMessage[counter] != ' ' && tcpIncomingMessage[counter] == ' ')
-                                tcpOutgoingMessage[counter] = udpMessage[counter];
-                            else
-                                tcpOutgoingMessage[counter] = ' ';
-                        }
-                    } else {
-                        sprintf(tcpOutgoingMessage, "MALFORMED MESSAGE(S) PROVIDED!");
+                    // Calls the appropriate function based on what mode is set
+                    switch (MODE) {
+                        case 0:
+                            simpleMerge(tcpOutgoingMessage, tcpIncomingMessage, udpMessage);
+                            break;
+                        case 1:
+                            advancedMerge(tcpOutgoingMessage, tcpIncomingMessage, udpMessage);
+                            break;
+                        case 2:
+                            customMerge(tcpOutgoingMessage, tcpIncomingMessage, udpMessage);
+                            break;
                     }
 
                     // Sends the complete message to the client over TCP
