@@ -15,21 +15,20 @@
 #define DEVOWEL_VALUE 1
 #define ENVOWEL_VALUE 2
 
-// 0 = Simple split/merge, 1 = Advanced split/merge, 2 = Custom split/merge
+// Use the following values for selecting the mode: 0 = Simple split/merge, 1 = Advanced split/merge, 2 = Custom split/merge
 #define MODE 0
 
-// Creates a socket that will be used by the fork to allow the client to communicate with the server
+// Creates sockets that will be used by the fork to allow the client to communicate with the server
 int clientSocketTCP;
+int clientSocketUDP;
 
 // Main function
 int main() {
     // Creates a struct that will store the complete address of the server
     struct sockaddr_in serverAddress;
-
-    // Creates a struct that will store the complete address of the client
     struct sockaddr *clientAddress;
 
-    // Creates char arrays that will store the message between the client and the server
+    // Creates char arrays that will store the messages between the client and the server
     char tcpIncomingMessage[MAX_MESSAGE_SIZE];
     char tcpOutgoingMessage[MAX_MESSAGE_SIZE];
     char udpMessage[MAX_MESSAGE_SIZE];
@@ -39,19 +38,18 @@ int main() {
     int tcpOutgoingMessageBytes = 0;
     int udpMessageBytes = 0;
 
-    // Initializes the incoming and outgoing message and temporary buffer arrays with zeroed bytes
+    // Initializes the incoming and outgoing message arrays with zeroed bytes
     memset(tcpIncomingMessage, 0, MAX_MESSAGE_SIZE);
     memset(tcpOutgoingMessage, 0, MAX_MESSAGE_SIZE);
     memset(udpMessage, 0, MAX_MESSAGE_SIZE);
 
-    // Creates a socket that will be used by the client to initially communicate with the proxy
+    // Creates a socket that will be used by the client to initially communicate with the server
     int serverSocketTCP;
-    int serverSocketUDP;
 
     // Will be used to store the PID of a child fork
     pid_t pid;
 
-    // Allocates memory to the location that will store the addresses
+    // Clears the memory for the locations that will store the addresses
     memset(&serverAddress, 0, sizeof(serverAddress));
     memset(&clientAddress, 0, sizeof(clientAddress));
 
@@ -67,48 +65,48 @@ int main() {
     // Creates a socket that will be used to communicate between the server and the client otherwise prints an error and returns if unsuccessful
     serverSocketTCP = socket(PF_INET, SOCK_STREAM, 0);
     if (serverSocketTCP == -1) {
-        fprintf(stderr, "Server: TCP socket() failed!\n");
+        printf("TCP Socket Creation Failed!\n");
         exit(1);
     }
 
     // Creates a socket that will be used to communicate between the server and the client otherwise prints an error and returns if unsuccessful
-    serverSocketUDP = socket(PF_INET, SOCK_DGRAM, 0);
-    if (serverSocketUDP == -1) {
-        fprintf(stderr, "Server: UDP socket() failed!\n");
+    clientSocketUDP = socket(PF_INET, SOCK_DGRAM, 0);
+    if (clientSocketUDP == -1) {
+        printf("UDP Socket Creation Failed!\n");
         exit(1);
     }
 
     // Sets the timeout duration for the UDP socket when receiving messages
     struct timeval timeoutDuration = {10, 0};
-    setsockopt(serverSocketUDP, SOL_SOCKET, SO_RCVTIMEO, (const char *) &timeoutDuration, sizeof timeoutDuration);
+    setsockopt(clientSocketUDP, SOL_SOCKET, SO_RCVTIMEO, (const char *) &timeoutDuration, sizeof timeoutDuration);
 
-    // Binds the specific address and port number to the socket otherwise prints an error and returns if unsuccessful
+    // Binds the specific address and port number to the TCP socket otherwise prints an error and returns if unsuccessful
     if (bind(serverSocketTCP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in)) == -1) {
-        fprintf(stderr, "Server: TCP bind() failed!\n");
+        printf("TCP Socket Bind Failed!\n");
         exit(1);
     }
 
-    // Binds the specific address and port number to the socket otherwise prints an error and returns if unsuccessful
-    if (bind(serverSocketUDP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in)) == -1) {
-        fprintf(stderr, "Server: UDP bind() failed!\n");
+    // Binds the specific address and port number to the UDP socket otherwise prints an error and returns if unsuccessful
+    if (bind(clientSocketUDP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in)) == -1) {
+        printf("UDP Socket Bind Failed!\n");
         exit(1);
     }
 
-    // Listens on the socket for an incoming client connection
+    // Listens on the TCP socket for an incoming client connection
     if (listen(serverSocketTCP, 5) == -1) {
-        fprintf(stderr, "Server: TCP listen() failed!\n");
+        printf("TCP Socket Listen Failed!\n");
         exit(1);
     }
 
-    // Prints out the welcome message and TCP & UDP port number that the proxy is operating on
-    fprintf(stderr, "Server running on TCP & UDP port %d...\n\n", PORT);
+    // Prints out the welcome message and TCP & UDP port number that the server is operating on
+    printf("Vowelizer server running on TCP & UDP port %d...\n\n", PORT);
 
     // Loops forever to handle client requests
     while (true) {
-        // Accepts an incoming socket connection request from the client
+        // Accepts an incoming TCP socket connection request from the client
         clientSocketTCP = accept(serverSocketTCP, clientAddress, NULL);
         if (clientSocketTCP == -1) {
-            fprintf(stderr, "Server: TCP accept() failed!\n");
+            printf("TCP Accept Failed!\n");
             exit(1);
         }
 
@@ -117,17 +115,17 @@ int main() {
 
         // Only proceeds further if the fork creation was successful (0 is returned)
         if (pid < 0) {
-            fprintf(stderr, "Server: fork() failed!\n");
+            printf("Fork Creation Failed!\n");
             exit(1);
         } else if (pid == 0) {
-            // Closes the inherited socket from the parent as the child does not need it
+            // Closes the inherited TCP socket from the parent as the child does not need it
             close(serverSocketTCP);
 
             // Gets the information sent by the client and stores the client's UDP port number
             char clientInfo[MAX_MESSAGE_SIZE];
             if (recv(clientSocketTCP, clientInfo, MAX_MESSAGE_SIZE, 0) < 0) {
                 printf("Server <-> Client Configuration Communication Failed!\n");
-                exit(-1);
+                exit(1);
             }
             int udpPortClient = atoi(clientInfo);
 
@@ -135,10 +133,11 @@ int main() {
             sockaddr_in udpClientAddress = reinterpret_cast<const sockaddr_in &>(clientAddress);
             udpClientAddress.sin_port = htons(udpPortClient);
 
-            // Receives the client's message using the socket
+            // Receives the client's message using the TCP socket
             bzero(tcpIncomingMessage, MAX_MESSAGE_SIZE);
             tcpIncomingMessageBytes = recv(clientSocketTCP, tcpIncomingMessage, MAX_MESSAGE_SIZE, 0);
 
+            // Keeps running until the client disconnects from the TCP socket handling their connection
             while (tcpIncomingMessageBytes > 0) {
                 // Stores the client's menu selection
                 int menuSelection = tcpIncomingMessage[0] - '0';
@@ -147,9 +146,9 @@ int main() {
                 memmove(tcpIncomingMessage, tcpIncomingMessage + 1, tcpIncomingMessageBytes);
                 tcpIncomingMessageBytes--;
 
+                // Checks to see if the client specified the devowel option
                 if (menuSelection == DEVOWEL_VALUE) {
-                    memset(udpMessage, ' ', tcpIncomingMessageBytes);
-                    memset(tcpOutgoingMessage, ' ', tcpIncomingMessageBytes);
+                    // Loops through the entire message and devowels it into two arrays
                     for (int counter = 0; counter < tcpIncomingMessageBytes; counter++) {
                         switch (tcpIncomingMessage[counter]) {
                             case 'A':
@@ -162,35 +161,41 @@ int main() {
                             case 'i':
                             case 'o':
                             case 'u':
+                                tcpOutgoingMessage[counter] = ' ';
                                 udpMessage[counter] = tcpIncomingMessage[counter];
                                 break;
                             default:
                                 tcpOutgoingMessage[counter] = tcpIncomingMessage[counter];
+                                udpMessage[counter] = ' ';
                                 break;
                         }
                     }
 
-                    // Sends the server's reply to the client
+                    // Sends the non-vowel part over TCP to the client
                     tcpOutgoingMessageBytes = strlen(tcpOutgoingMessage);
                     if (send(clientSocketTCP, tcpOutgoingMessage, tcpOutgoingMessageBytes, 0) < 0) {
-                        fprintf(stderr, "Server: TCP send() failed!\n");
+                        printf("TCP Send Failed!\n");
                         exit(1);
                     }
 
-                    // Sends the server's reply to the client
+                    // Sends the vowel part over UDP to the client
                     udpMessageBytes = strlen(udpMessage);
-                    if (sendto(serverSocketUDP, udpMessage, udpMessageBytes, MSG_CONFIRM,
+                    if (sendto(clientSocketUDP, udpMessage, udpMessageBytes, MSG_CONFIRM,
                                (const struct sockaddr *) &udpClientAddress, sizeof udpClientAddress) < 0) {
-                        fprintf(stderr, "Server: UDP send() failed!\n");
+                        printf("UDP Send Failed!\n");
                         exit(1);
                     }
-                } else if (menuSelection == ENVOWEL_VALUE) {
-                    int len;
-
-                    udpMessageBytes = recvfrom(serverSocketUDP, udpMessage, MAX_MESSAGE_SIZE,
+                }
+                    // Checks to see if the client specified the envowel option
+                else if (menuSelection == ENVOWEL_VALUE) {
+                    // Receives the vowel part over UDP from the client
+                    udpMessageBytes = recvfrom(clientSocketUDP, udpMessage, MAX_MESSAGE_SIZE,
                                                MSG_WAITALL, NULL, (socklen_t *) sizeof clientAddress);
+
+                    // Null terminates the message
                     udpMessage[udpMessageBytes] = '\0';
 
+                    // Loops through the both parts of the message and envowels it into one array
                     if (tcpIncomingMessageBytes == udpMessageBytes) {
                         for (int counter = 0; counter < tcpIncomingMessageBytes; counter++) {
                             if (udpMessage[counter] == ' ' && tcpIncomingMessage[counter] != ' ')
@@ -202,29 +207,31 @@ int main() {
                         sprintf(tcpOutgoingMessage, "MALFORMED MESSAGE(S) PROVIDED!");
                     }
 
-                    // Sends the server's reply to the client
+                    // Sends the complete message to the client over TCP
                     tcpOutgoingMessageBytes = strlen(tcpOutgoingMessage);
                     if (send(clientSocketTCP, tcpOutgoingMessage, tcpOutgoingMessageBytes, 0) < 0) {
-                        fprintf(stderr, "Server: TCP send() failed!\n");
+                        printf("TCP Send Failed!\n");
                         exit(1);
                     }
                 }
 
+                // Clears the incoming and outgoing message arrays with zeroed bytes
                 bzero(tcpIncomingMessage, MAX_MESSAGE_SIZE);
                 bzero(tcpOutgoingMessage, MAX_MESSAGE_SIZE);
                 bzero(udpMessage, MAX_MESSAGE_SIZE);
 
+                // Receives the client's message using the TCP socket
                 tcpIncomingMessageBytes = recv(clientSocketTCP, tcpIncomingMessage, MAX_MESSAGE_SIZE, 0);
             }
 
             // Closes the socket with the client and kills the fork
-            fprintf(stderr, "Child process received nothing, so it is exiting now\n");
+            printf("Child process received nothing, so it is exiting now\n");
             close(clientSocketTCP);
             exit(0);
         } else {
-            // Informs the user of the child's PID (that will be handling the client and proxy connection) and that the proxy server will now continue to listen for new requests
-            fprintf(stderr, "Proxy Server created child process %d to handle the client\n", pid);
-            fprintf(stderr, "Proxy Server process going back to listening for new clients now...\n\n");
+            // Informs the user of the child's PID (that will be handling the client and server connection) and that the server will now continue to listen for new requests
+            printf("Server created child process %d to handle the client\n", pid);
+            printf("Server process going back to listening for new clients now...\n\n");
 
             // Parent does not need the socket that communicates with the client
             close(clientSocketTCP);

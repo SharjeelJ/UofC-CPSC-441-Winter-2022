@@ -32,23 +32,26 @@ void printMenu() {
 
 // Main function
 int main() {
-    // Creates a struct that will store the complete address of the server
+    // Creates structs that will store the complete addresses of the server and client
     struct sockaddr_in serverAddress;
-
-    // Creates a struct that will store the complete address of the client
     struct sockaddr_in clientAddress;
 
-    // Creates char arrays that will store the message between the client and the server
-    char tcpCompleteMessage[MAX_MESSAGE_SIZE];
-    char tcpSplitMessage[MAX_MESSAGE_SIZE];
-    char udpSplitMessage[MAX_MESSAGE_SIZE];
+    // Creates char arrays that will store the messages between the client and the server
+    char tcpIncomingMessage[MAX_MESSAGE_SIZE];
+    char tcpOutgoingMessage[MAX_MESSAGE_SIZE];
+    char udpMessage[MAX_MESSAGE_SIZE];
 
     // Initialize int variables to store the number of bytes each char array holds
-    int tcpCompleteMessageBytes = 0;
-    int tcpSplitMessageBytes = 0;
-    int udpSplitMessageBytes = 0;
+    int tcpOutgoingMessageBytes = 0;
+    int tcpIncomingMessageBytes = 0;
+    int udpMessageBytes = 0;
 
-    // Allocates memory to the location that will store the address of the socket
+    // Initializes the incoming and outgoing message arrays with zeroed bytes
+    memset(tcpIncomingMessage, 0, MAX_MESSAGE_SIZE);
+    memset(tcpOutgoingMessage, 0, MAX_MESSAGE_SIZE);
+    memset(udpMessage, 0, MAX_MESSAGE_SIZE);
+
+    // Clears the memory for the locations that will store the addresses
     memset(&serverAddress, 0, sizeof(serverAddress));
     memset(&clientAddress, 0, sizeof(clientAddress));
 
@@ -62,51 +65,51 @@ int main() {
     inet_pton(AF_INET, IP, &serverAddress.sin_addr);
 
     // Creates a TCP socket that will be used to communicate with the server otherwise prints an error and returns if unsuccessful
-    int customSocketTCP = socket(AF_INET, SOCK_STREAM, 0);
-    if (customSocketTCP == -1) {
+    int clientSocketTCP = socket(AF_INET, SOCK_STREAM, 0);
+    if (clientSocketTCP == -1) {
         printf("TCP Socket Creation Failed!\n");
-        exit(-1);
+        exit(1);
     }
 
     // Creates a UDP socket that will be used to communicate with the server otherwise prints an error and returns if unsuccessful
-    int customSocketUDP = socket(AF_INET, SOCK_DGRAM, 0);
-    if (customSocketUDP == -1) {
+    int clientSocketUDP = socket(AF_INET, SOCK_DGRAM, 0);
+    if (clientSocketUDP == -1) {
         printf("UDP Socket Creation Failed!\n");
-        exit(-1);
+        exit(1);
     }
 
     // Establishes a connection using the TCP socket otherwise prints an error and returns if unsuccessful
-    int connectionStatusTCP = connect(customSocketTCP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in));
-    if (connectionStatusTCP == -1) {
+    if (connect(clientSocketTCP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in)) == -1) {
         printf("TCP Socket Connection Failed!\n");
-        exit(-1);
+        exit(1);
     }
 
     // Establishes a connection using the UDP socket otherwise prints an error and returns if unsuccessful
-    int connectionStatusUDP = connect(customSocketUDP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in));
-    if (connectionStatusUDP == -1) {
+    if (connect(clientSocketUDP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in)) == -1) {
         printf("UDP Socket Connection Failed!\n");
-        exit(-1);
+        exit(1);
     }
 
     // Sets the timeout duration for the UDP socket when receiving messages
     struct timeval timeoutDuration = {10, 0};
-    setsockopt(customSocketUDP, SOL_SOCKET, SO_RCVTIMEO, (const char *) &timeoutDuration, sizeof timeoutDuration);
+    setsockopt(clientSocketUDP, SOL_SOCKET, SO_RCVTIMEO, (const char *) &timeoutDuration, sizeof timeoutDuration);
 
     // Stores the client's UDP socket information
     socklen_t clientAddressLength = sizeof(clientAddress);
-    getsockname(customSocketUDP, (struct sockaddr *) &clientAddress, &clientAddressLength);
+    getsockname(clientSocketUDP, (struct sockaddr *) &clientAddress, &clientAddressLength);
 
     // Sends the client's UDP port number to the server over TCP (this way the server knows where to send UDP packets)
-    char udpPortNumber[MAX_MESSAGE_SIZE];
-    sprintf(udpPortNumber, "%d", ntohs(clientAddress.sin_port));
-    int udpPortNumberSent = send(customSocketTCP, udpPortNumber, strlen(udpPortNumber), 0);
-    if (udpPortNumberSent == -1) {
+    char udpClientPortNumber[MAX_MESSAGE_SIZE];
+    sprintf(udpClientPortNumber, "%d", ntohs(clientAddress.sin_port));
+    if (send(clientSocketTCP, udpClientPortNumber, strlen(udpClientPortNumber), 0) == -1) {
         printf("Server <-> Client Configuration Communication Failed!\n");
-        exit(-1);
+        exit(1);
     }
 
-    // Runs until the user specifies to exit the client program
+    // Prints out the welcome message
+    printf("Welcome! This is the client for the Vowelizer program...\n");
+
+    // Runs the client until the user specifies to exit
     int userMenuSelection = -1;
     char userInput;
     while (userMenuSelection != EXIT_VALUE) {
@@ -114,123 +117,125 @@ int main() {
         printMenu();
         scanf("%d", &userMenuSelection);
 
+        // Checks to see if the user specified the devowel message option
         if (userMenuSelection == DEVOWEL_VALUE) {
-            // Makes the first char in the message that will be sent the user's menu selection
-            tcpCompleteMessageBytes = 1;
-            tcpCompleteMessage[0] = userMenuSelection + '0';
+            // Sets the first char in the message that will be sent the user's menu selection
+            tcpOutgoingMessageBytes = 1;
+            tcpOutgoingMessage[0] = userMenuSelection + '0';
 
-            // Gets the newline character that follows the user's menu selection input
+            // Gets the newline character that follows the input
             userInput = getchar();
 
             // Gets and stores the message that needs to be sent to the server from the user
-            printf("Enter your message: ");
+            printf("Enter your message to devowel: ");
             while ((userInput = getchar()) != '\n') {
-                tcpCompleteMessage[tcpCompleteMessageBytes] = userInput;
-                tcpCompleteMessageBytes++;
+                tcpOutgoingMessage[tcpOutgoingMessageBytes] = userInput;
+                tcpOutgoingMessageBytes++;
             }
 
             // Null terminates the message
-            tcpCompleteMessage[tcpCompleteMessageBytes] = '\0';
+            tcpOutgoingMessage[tcpOutgoingMessageBytes] = '\0';
 
-            // Sends the message using the socket otherwise prints an error and returns if unsuccessful
-            tcpCompleteMessageBytes = send(customSocketTCP, tcpCompleteMessage, strlen(tcpCompleteMessage), 0);
-            if (tcpCompleteMessageBytes == -1) {
+            // Sends the message using the TCP socket otherwise prints an error and returns if unsuccessful
+            tcpOutgoingMessageBytes = send(clientSocketTCP, tcpOutgoingMessage, tcpOutgoingMessageBytes, 0);
+            if (tcpOutgoingMessageBytes == -1) {
                 printf("TCP Socket Send Failed!\n");
                 continue;
             }
 
-            // Receives the reply using the socket otherwise prints an error and returns if unsuccessful
-            tcpSplitMessageBytes = recv(customSocketTCP, tcpSplitMessage, MAX_MESSAGE_SIZE, 0);
-            if (tcpSplitMessageBytes == -1) {
+            // Receives the reply using the TCP socket otherwise prints an error and returns if unsuccessful
+            tcpIncomingMessageBytes = recv(clientSocketTCP, tcpIncomingMessage, MAX_MESSAGE_SIZE, 0);
+            if (tcpIncomingMessageBytes == -1) {
                 printf("TCP Socket Receive Failed!\n");
                 continue;
             }
 
-            if (tcpSplitMessageBytes > 0) {
-                /* make sure the message is null-terminated in C */
-                tcpSplitMessage[tcpSplitMessageBytes] = '\0';
-                printf("Server sent %d bytes of non-vowels using TCP: %s\n", tcpSplitMessageBytes, tcpSplitMessage);
+            // Prints out the message if one was received
+            if (tcpIncomingMessageBytes > 0) {
+                // Null terminates the message
+                tcpIncomingMessage[tcpIncomingMessageBytes] = '\0';
+                printf("Server sent %d bytes of non-vowels using TCP: %s\n", tcpIncomingMessageBytes,
+                       tcpIncomingMessage);
             } else {
-                /* an error condition if the server ends unexpectedly */
                 printf("TCP Socket Received Nothing!\n");
                 continue;
             }
 
-            // Receives the reply using the socket otherwise prints an error and returns if unsuccessful
-            int len;
-            udpSplitMessageBytes = recvfrom(customSocketUDP, udpSplitMessage, MAX_MESSAGE_SIZE, MSG_WAITALL,
-                                            (struct sockaddr *) &serverAddress, (socklen_t *) &len);
-            if (udpSplitMessageBytes == -1) {
+            // Receives the reply using the socket UDP otherwise prints an error and returns if unsuccessful
+            int length;
+            udpMessageBytes = recvfrom(clientSocketUDP, udpMessage, MAX_MESSAGE_SIZE, MSG_WAITALL,
+                                       (struct sockaddr *) &serverAddress, (socklen_t *) &length);
+            if (udpMessageBytes == -1) {
                 printf("UDP Socket Receive Failed!\n");
                 continue;
             }
 
-            if (udpSplitMessageBytes > 0) {
-                /* make sure the message is null-terminated in C */
-                udpSplitMessage[udpSplitMessageBytes] = '\0';
-                printf("Server sent %d bytes of vowels using UDP    : %s\n", udpSplitMessageBytes, udpSplitMessage);
+            // Prints out the message if one was received
+            if (udpMessageBytes > 0) {
+                // Null terminates the message
+                udpMessage[udpMessageBytes] = '\0';
+                printf("Server sent %d bytes of vowels using UDP    : %s\n", udpMessageBytes, udpMessage);
             } else {
-                /* an error condition if the server ends unexpectedly */
                 printf("UDP Socket Received Nothing!\n");
                 continue;
             }
-        } else if (userMenuSelection == ENVOWEL_VALUE) {
-            // Makes the first char in the message that will be sent the user's menu selection
-            tcpSplitMessageBytes = 1;
-            tcpSplitMessage[0] = userMenuSelection + '0';
+        }
+            // Checks to see if the user specified the envowel message option
+        else if (userMenuSelection == ENVOWEL_VALUE) {
+            // Sets the first char in the message that will be sent the user's menu selection
+            tcpOutgoingMessageBytes = 1;
+            tcpOutgoingMessage[0] = userMenuSelection + '0';
 
-            // Gets the newline character that follows the user's menu selection input
+            // Gets the newline character that follows the input
             userInput = getchar();
 
             // Gets and stores the message that needs to be sent to the server from the user
-            printf("Enter your message1: ");
+            printf("Enter non-vowel part of the message to envowel: ");
             while ((userInput = getchar()) != '\n') {
-                tcpSplitMessage[tcpSplitMessageBytes] = userInput;
-                tcpSplitMessageBytes++;
+                tcpOutgoingMessage[tcpOutgoingMessageBytes] = userInput;
+                tcpOutgoingMessageBytes++;
             }
 
             // Null terminates the message
-            tcpSplitMessage[tcpSplitMessageBytes] = '\0';
+            tcpOutgoingMessage[tcpOutgoingMessageBytes] = '\0';
 
             // Gets and stores the message that needs to be sent to the server from the user
-            printf("Enter your message2: ");
+            printf("Enter vowel part of the message to envowel    : ");
             while ((userInput = getchar()) != '\n') {
-                udpSplitMessage[udpSplitMessageBytes] = userInput;
-                udpSplitMessageBytes++;
+                udpMessage[udpMessageBytes] = userInput;
+                udpMessageBytes++;
             }
 
             // Null terminates the message
-            udpSplitMessage[udpSplitMessageBytes] = '\0';
+            udpMessage[udpMessageBytes] = '\0';
 
-            // Sends the message using the socket otherwise prints an error and returns if unsuccessful
-            tcpSplitMessageBytes = send(customSocketTCP, tcpSplitMessage, strlen(tcpSplitMessage), 0);
-            if (tcpSplitMessageBytes == -1) {
+            // Sends the message using the TCP socket otherwise prints an error and returns if unsuccessful
+            tcpOutgoingMessageBytes = send(clientSocketTCP, tcpOutgoingMessage, tcpOutgoingMessageBytes, 0);
+            if (tcpOutgoingMessageBytes == -1) {
                 printf("TCP Socket Send Failed!\n");
                 continue;
             }
 
-            // Sends the server's reply to the client
-            udpSplitMessageBytes = strlen(udpSplitMessage);
-            if (sendto(customSocketUDP, udpSplitMessage, udpSplitMessageBytes, MSG_CONFIRM,
+            // Sends the message using the UDP socket otherwise prints an error and returns if unsuccessful
+            if (sendto(clientSocketUDP, udpMessage, udpMessageBytes, MSG_CONFIRM,
                        (const struct sockaddr *) &serverAddress, sizeof serverAddress) < 0) {
                 fprintf(stderr, "TCP Socket Send Failed!\n");
                 continue;
             }
 
-            // Receives the reply using the socket otherwise prints an error and returns if unsuccessful
-            tcpCompleteMessageBytes = recv(customSocketTCP, tcpCompleteMessage, MAX_MESSAGE_SIZE, 0);
-            if (tcpCompleteMessageBytes == -1) {
+            // Receives the reply using the TCP socket otherwise prints an error and returns if unsuccessful
+            tcpIncomingMessageBytes = recv(clientSocketTCP, tcpIncomingMessage, MAX_MESSAGE_SIZE, 0);
+            if (tcpIncomingMessageBytes == -1) {
                 printf("TCP Socket Receive Failed!\n");
                 continue;
             }
 
-            if (tcpCompleteMessageBytes > 0) {
-                /* make sure the message is null-terminated in C */
-                tcpCompleteMessage[tcpCompleteMessageBytes] = '\0';
-                printf("Server sent %d bytes of non-vowels using TCP: %s\n", tcpCompleteMessageBytes,
-                       tcpCompleteMessage);
+            // Prints out the message if one was received
+            if (tcpIncomingMessageBytes > 0) {
+                // Null terminates the message
+                tcpIncomingMessage[tcpIncomingMessageBytes] = '\0';
+                printf("Server sent %d bytes using TCP: %s\n", tcpIncomingMessageBytes, tcpIncomingMessage);
             } else {
-                /* an error condition if the server ends unexpectedly */
                 printf("TCP Socket Received Nothing!\n");
                 continue;
             }
@@ -239,8 +244,8 @@ int main() {
     }
 
     // Closes the sockets
-    close(customSocketTCP);
-    close(customSocketUDP);
+    close(clientSocketTCP);
+    close(clientSocketUDP);
 
     // Ends the program with the success exit code
     exit(0);
