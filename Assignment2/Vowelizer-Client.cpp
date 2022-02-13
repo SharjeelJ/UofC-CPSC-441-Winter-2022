@@ -10,15 +10,17 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <cstdlib>
 
 // Global static variables
 #define IP "127.0.0.1"
 #define PORT 48259
-#define MAX_MESSAGE_SIZE 1024
+#define MAX_MESSAGE_SIZE 2048
 #define EXIT_VALUE 0
 #define DEVOWEL_VALUE 1
 #define ENVOWEL_VALUE 2
 
+// Function that will print out the menu of options that are supported
 void printMenu() {
     printf("\n");
     printf("Please choose an option from the following menu:\n");
@@ -30,8 +32,11 @@ void printMenu() {
 
 // Main function
 int main() {
-    // Creates a struct that will store the complete address of the socket
-    struct sockaddr_in socketAddress;
+    // Creates a struct that will store the complete address of the server
+    struct sockaddr_in serverAddress;
+
+    // Creates a struct that will store the complete address of the client
+    struct sockaddr_in clientAddress;
 
     // Creates char arrays that will store the message between the client and the server
     char tcpCompleteMessage[MAX_MESSAGE_SIZE];
@@ -44,56 +49,68 @@ int main() {
     int udpSplitMessageBytes = 0;
 
     // Allocates memory to the location that will store the address of the socket
-    memset(&socketAddress, 0, sizeof(socketAddress));
+    memset(&serverAddress, 0, sizeof(serverAddress));
+    memset(&clientAddress, 0, sizeof(clientAddress));
 
     // Sets the socket address family to IPv4
-    socketAddress.sin_family = AF_INET;
+    serverAddress.sin_family = AF_INET;
 
     // Sets the port number that the socket will use
-    socketAddress.sin_port = htons(PORT);
+    serverAddress.sin_port = htons(PORT);
 
     // Sets the complete IP address that the socket will use
-    inet_pton(AF_INET, IP, &socketAddress.sin_addr);
+    inet_pton(AF_INET, IP, &serverAddress.sin_addr);
 
     // Creates a TCP socket that will be used to communicate with the server otherwise prints an error and returns if unsuccessful
     int customSocketTCP = socket(AF_INET, SOCK_STREAM, 0);
     if (customSocketTCP == -1) {
         printf("TCP Socket Creation Failed!\n");
-        return -1;
+        exit(-1);
     }
 
     // Creates a UDP socket that will be used to communicate with the server otherwise prints an error and returns if unsuccessful
     int customSocketUDP = socket(AF_INET, SOCK_DGRAM, 0);
     if (customSocketUDP == -1) {
         printf("UDP Socket Creation Failed!\n");
-        return -1;
+        exit(-1);
     }
 
     // Establishes a connection using the TCP socket otherwise prints an error and returns if unsuccessful
-    int connectionStatusTCP = connect(customSocketTCP, (struct sockaddr *) &socketAddress, sizeof(struct sockaddr_in));
+    int connectionStatusTCP = connect(customSocketTCP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in));
     if (connectionStatusTCP == -1) {
         printf("TCP Socket Connection Failed!\n");
-        return -1;
+        exit(-1);
     }
 
     // Establishes a connection using the UDP socket otherwise prints an error and returns if unsuccessful
-    int connectionStatusUDP = connect(customSocketUDP, (struct sockaddr *) &socketAddress, sizeof(struct sockaddr_in));
+    int connectionStatusUDP = connect(customSocketUDP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in));
     if (connectionStatusUDP == -1) {
         printf("UDP Socket Connection Failed!\n");
-        return -1;
+        exit(-1);
     }
 
-//    printf("\nHELLO WORLD1!\n");
-//    struct sockaddr_in client;
-//    socklen_t clientsz = sizeof(client);
-//    getsockname(customSocketUDP, (struct sockaddr *) &client, &clientsz);
-//    printf("[%s:%u] > ", inet_ntoa(client.sin_addr), ntohs(client.sin_port));
-//    printf("\nHELLO WORLD2!\n");
+    // Sets the timeout duration for the UDP socket when receiving messages
+    struct timeval timeoutDuration = {10, 0};
+    setsockopt(customSocketUDP, SOL_SOCKET, SO_RCVTIMEO, (const char *) &timeoutDuration, sizeof timeoutDuration);
 
-    int userMenuSelection;
+    // Stores the client's UDP socket information
+    socklen_t clientAddressLength = sizeof(clientAddress);
+    getsockname(customSocketUDP, (struct sockaddr *) &clientAddress, &clientAddressLength);
+
+    // Sends the client's UDP port number to the server over TCP (this way the server knows where to send UDP packets)
+    char udpPortNumber[MAX_MESSAGE_SIZE];
+    sprintf(udpPortNumber, "%d", ntohs(clientAddress.sin_port));
+    int udpPortNumberSent = send(customSocketTCP, udpPortNumber, strlen(udpPortNumber), 0);
+    if (udpPortNumberSent == -1) {
+        printf("Server <-> Client Configuration Communication Failed!\n");
+        exit(-1);
+    }
+
+    // Runs until the user specifies to exit the client program
+    int userMenuSelection = -1;
     char userInput;
-
     while (userMenuSelection != EXIT_VALUE) {
+        // Prompts the user for a menu selection and stores it
         printMenu();
         scanf("%d", &userMenuSelection);
 
@@ -101,9 +118,12 @@ int main() {
             // Gets the newline character that follows the user's menu selection input
             userInput = getchar();
 
+            // Makes the first char in the message that will be sent the user's menu selection
+            tcpCompleteMessageBytes = 1;
+            tcpCompleteMessage[0] = userMenuSelection + '0';
+
             // Gets and stores the message that needs to be sent to the server from the user
             printf("Enter your message: ");
-            tcpCompleteMessageBytes = 0;
             while ((userInput = getchar()) != '\n') {
                 tcpCompleteMessage[tcpCompleteMessageBytes] = userInput;
                 tcpCompleteMessageBytes++;
@@ -116,43 +136,34 @@ int main() {
             tcpCompleteMessageBytes = send(customSocketTCP, tcpCompleteMessage, strlen(tcpCompleteMessage), 0);
             if (tcpCompleteMessageBytes == -1) {
                 printf("TCP Socket Send Failed!\n");
-                return -1;
+                continue;
             }
-
-//            printf("I just sent %d bytes to the server via the TCP socket!\n", tcpCompleteMessageBytes);
 
             // Receives the reply using the socket otherwise prints an error and returns if unsuccessful
             tcpSplitMessageBytes = recv(customSocketTCP, tcpSplitMessage, MAX_MESSAGE_SIZE, 0);
             if (tcpSplitMessageBytes == -1) {
                 printf("TCP Socket Receive Failed!\n");
-                return -1;
+                continue;
             }
-
-//            printf("I just got %d bytes from the server via the TCP socket!\n", tcpSplitMessageBytes);
 
             if (tcpSplitMessageBytes > 0) {
                 /* make sure the message is null-terminated in C */
                 tcpSplitMessage[tcpSplitMessageBytes] = '\0';
-                printf("Server sent %d bytes of non-vowels using TCP: %s\n", tcpCompleteMessageBytes, tcpSplitMessage);
+                printf("Server sent %d bytes of non-vowels using TCP: %s\n", tcpSplitMessageBytes, tcpSplitMessage);
             } else {
                 /* an error condition if the server ends unexpectedly */
                 printf("TCP Socket Received Nothing!\n");
                 continue;
             }
 
-            sendto(customSocketUDP, " ", strlen(" "), MSG_CONFIRM, (const struct sockaddr *) &socketAddress,
-                   sizeof(socketAddress));
-
             // Receives the reply using the socket otherwise prints an error and returns if unsuccessful
             int len;
             udpSplitMessageBytes = recvfrom(customSocketUDP, udpSplitMessage, MAX_MESSAGE_SIZE, MSG_WAITALL,
-                                            (struct sockaddr *) &socketAddress, (socklen_t *) &len);
+                                            (struct sockaddr *) &serverAddress, (socklen_t *) &len);
             if (udpSplitMessageBytes == -1) {
                 printf("UDP Socket Receive Failed!\n");
-                return -1;
+                continue;
             }
-
-//            printf("I just got %d bytes from the server via the UDP socket!\n", tcpSplitMessageBytes);
 
             if (udpSplitMessageBytes > 0) {
                 /* make sure the message is null-terminated in C */
@@ -174,5 +185,5 @@ int main() {
     close(customSocketUDP);
 
     // Ends the program with the success exit code
-    return 0;
+    exit(0);
 }

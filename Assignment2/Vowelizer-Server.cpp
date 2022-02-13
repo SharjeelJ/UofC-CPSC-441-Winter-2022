@@ -10,7 +10,7 @@
 #include <arpa/inet.h>
 
 // Global static variables
-#define MAX_MESSAGE_SIZE 1024
+#define MAX_MESSAGE_SIZE 2048
 #define PORT 48259
 
 // Creates a socket that will be used by the fork to allow the client to communicate with the proxy
@@ -18,9 +18,11 @@ int clientSocketTCP;
 
 // Main function
 int main() {
-    // Creates a struct that will store the complete address of the socket being created
-    struct sockaddr_in socketAddress = {};
-    struct sockaddr_in clientAddress = {};
+    // Creates a struct that will store the complete address of the server
+    struct sockaddr_in serverAddress;
+
+    // Creates a struct that will store the complete address of the client
+    struct sockaddr *clientAddress;
 
     // Creates char arrays that will store the message between the client and the server
     char tcpCompleteMessage[MAX_MESSAGE_SIZE];
@@ -44,18 +46,18 @@ int main() {
     // Will be used to store the PID of a child fork
     pid_t pid;
 
-    // Allocates memory to the location that will store the address of the socket
-    memset(&socketAddress, 0, sizeof(socketAddress));
+    // Allocates memory to the location that will store the addresses
+    memset(&serverAddress, 0, sizeof(serverAddress));
     memset(&clientAddress, 0, sizeof(clientAddress));
 
     // Sets the socket address family to IPv4
-    socketAddress.sin_family = AF_INET;
+    serverAddress.sin_family = AF_INET;
 
     // Sets the port number that the socket will use
-    socketAddress.sin_port = htons(PORT);
+    serverAddress.sin_port = htons(PORT);
 
     // Sets the complete IP address that the socket will use
-    socketAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+    serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
 
     // Creates a socket that will be used to communicate between the server and the client otherwise prints an error and returns if unsuccessful
     serverSocketTCP = socket(PF_INET, SOCK_STREAM, 0);
@@ -71,14 +73,18 @@ int main() {
         exit(1);
     }
 
+    // Sets the timeout duration for the UDP socket when receiving messages
+    struct timeval timeoutDuration = {10, 0};
+    setsockopt(serverSocketUDP, SOL_SOCKET, SO_RCVTIMEO, (const char *) &timeoutDuration, sizeof timeoutDuration);
+
     // Binds the specific address and port number to the socket otherwise prints an error and returns if unsuccessful
-    if (bind(serverSocketTCP, (struct sockaddr *) &socketAddress, sizeof(struct sockaddr_in)) == -1) {
+    if (bind(serverSocketTCP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in)) == -1) {
         fprintf(stderr, "Server: TCP bind() failed!\n");
         exit(1);
     }
 
     // Binds the specific address and port number to the socket otherwise prints an error and returns if unsuccessful
-    if (bind(serverSocketUDP, (struct sockaddr *) &socketAddress, sizeof(struct sockaddr_in)) == -1) {
+    if (bind(serverSocketUDP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in)) == -1) {
         fprintf(stderr, "Server: UDP bind() failed!\n");
         exit(1);
     }
@@ -95,7 +101,7 @@ int main() {
     // Loops forever to handle client requests
     while (true) {
         // Accepts an incoming socket connection request from the client
-        clientSocketTCP = accept(serverSocketTCP, NULL, NULL);
+        clientSocketTCP = accept(serverSocketTCP, clientAddress, NULL);
         if (clientSocketTCP == -1) {
             fprintf(stderr, "Server: TCP accept() failed!\n");
             exit(1);
@@ -112,11 +118,26 @@ int main() {
             // Closes the inherited socket from the parent as the child does not need it
             close(serverSocketTCP);
 
+            // Gets the information sent by the client and stores the client's UDP port number
+            char clientInfo[MAX_MESSAGE_SIZE];
+            if (recv(clientSocketTCP, clientInfo, MAX_MESSAGE_SIZE, 0) < 0) {
+                printf("Server <-> Client Configuration Communication Failed!\n");
+                exit(-1);
+            }
+            int udpPortClient = atoi(clientInfo);
+
             // Receives the client's message using the socket
             bzero(tcpCompleteMessage, MAX_MESSAGE_SIZE);
             tcpCompleteMessageBytes = recv(clientSocketTCP, tcpCompleteMessage, MAX_MESSAGE_SIZE, 0);
 
             while (tcpCompleteMessageBytes > 0) {
+                // Stores the client's menu selection
+                int menuSelection = tcpCompleteMessage[0] - '0';
+
+                // Removes the menu selection char from the message
+                memmove(tcpCompleteMessage, tcpCompleteMessage + 1, tcpCompleteMessageBytes);
+                tcpCompleteMessageBytes--;
+
                 memset(udpSplitMessage, ' ', tcpCompleteMessageBytes);
                 memset(tcpSplitMessage, ' ', tcpCompleteMessageBytes);
                 for (int counter = 0; counter < tcpCompleteMessageBytes; counter++) {
@@ -146,15 +167,14 @@ int main() {
                     exit(1);
                 }
 
-                int addressLength = sizeof(clientAddress);
-                char temp[MAX_MESSAGE_SIZE];
-                recvfrom(serverSocketUDP, temp, MAX_MESSAGE_SIZE, MSG_WAITALL, (struct sockaddr *) &clientAddress,
-                         (socklen_t *) &addressLength);
+                // Stores the complete client UDP address with the provided port
+                sockaddr_in udpClientAddress = reinterpret_cast<const sockaddr_in &>(clientAddress);
+                udpClientAddress.sin_port = htons(udpPortClient);
 
                 // Sends the server's reply to the client
                 udpSplitMessageBytes = strlen(udpSplitMessage);
                 if (sendto(serverSocketUDP, udpSplitMessage, udpSplitMessageBytes, MSG_CONFIRM,
-                           (const struct sockaddr *) &clientAddress, addressLength) < 0) {
+                           (const struct sockaddr *) &udpClientAddress, sizeof udpClientAddress) < 0) {
                     fprintf(stderr, "Server: UDP send() failed!\n");
                     exit(1);
                 }
