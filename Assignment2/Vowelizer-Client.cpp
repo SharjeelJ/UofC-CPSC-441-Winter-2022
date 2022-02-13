@@ -115,12 +115,12 @@ int main() {
         scanf("%d", &userMenuSelection);
 
         if (userMenuSelection == DEVOWEL_VALUE) {
-            // Gets the newline character that follows the user's menu selection input
-            userInput = getchar();
-
             // Makes the first char in the message that will be sent the user's menu selection
             tcpCompleteMessageBytes = 1;
             tcpCompleteMessage[0] = userMenuSelection + '0';
+
+            // Gets the newline character that follows the user's menu selection input
+            userInput = getchar();
 
             // Gets and stores the message that needs to be sent to the server from the user
             printf("Enter your message: ");
@@ -175,7 +175,65 @@ int main() {
                 continue;
             }
         } else if (userMenuSelection == ENVOWEL_VALUE) {
+            // Makes the first char in the message that will be sent the user's menu selection
+            tcpSplitMessageBytes = 1;
+            tcpSplitMessage[0] = userMenuSelection + '0';
 
+            // Gets the newline character that follows the user's menu selection input
+            userInput = getchar();
+
+            // Gets and stores the message that needs to be sent to the server from the user
+            printf("Enter your message1: ");
+            while ((userInput = getchar()) != '\n') {
+                tcpSplitMessage[tcpSplitMessageBytes] = userInput;
+                tcpSplitMessageBytes++;
+            }
+
+            // Null terminates the message
+            tcpSplitMessage[tcpSplitMessageBytes] = '\0';
+
+            // Gets and stores the message that needs to be sent to the server from the user
+            printf("Enter your message2: ");
+            while ((userInput = getchar()) != '\n') {
+                udpSplitMessage[udpSplitMessageBytes] = userInput;
+                udpSplitMessageBytes++;
+            }
+
+            // Null terminates the message
+            udpSplitMessage[udpSplitMessageBytes] = '\0';
+
+            // Sends the message using the socket otherwise prints an error and returns if unsuccessful
+            tcpSplitMessageBytes = send(customSocketTCP, tcpSplitMessage, strlen(tcpSplitMessage), 0);
+            if (tcpSplitMessageBytes == -1) {
+                printf("TCP Socket Send Failed!\n");
+                continue;
+            }
+
+            // Sends the server's reply to the client
+            udpSplitMessageBytes = strlen(udpSplitMessage);
+            if (sendto(customSocketUDP, udpSplitMessage, udpSplitMessageBytes, MSG_CONFIRM,
+                       (const struct sockaddr *) &serverAddress, sizeof serverAddress) < 0) {
+                fprintf(stderr, "TCP Socket Send Failed!\n");
+                continue;
+            }
+
+            // Receives the reply using the socket otherwise prints an error and returns if unsuccessful
+            tcpCompleteMessageBytes = recv(customSocketTCP, tcpCompleteMessage, MAX_MESSAGE_SIZE, 0);
+            if (tcpCompleteMessageBytes == -1) {
+                printf("TCP Socket Receive Failed!\n");
+                continue;
+            }
+
+            if (tcpCompleteMessageBytes > 0) {
+                /* make sure the message is null-terminated in C */
+                tcpCompleteMessage[tcpCompleteMessageBytes] = '\0';
+                printf("Server sent %d bytes of non-vowels using TCP: %s\n", tcpCompleteMessageBytes,
+                       tcpCompleteMessage);
+            } else {
+                /* an error condition if the server ends unexpectedly */
+                printf("TCP Socket Received Nothing!\n");
+                continue;
+            }
         } else if (userMenuSelection != EXIT_VALUE)
             printf("Invalid menu selection. Please try again.\n");
     }

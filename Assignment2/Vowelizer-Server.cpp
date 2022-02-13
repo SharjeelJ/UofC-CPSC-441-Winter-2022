@@ -12,8 +12,13 @@
 // Global static variables
 #define MAX_MESSAGE_SIZE 2048
 #define PORT 48259
+#define DEVOWEL_VALUE 1
+#define ENVOWEL_VALUE 2
 
-// Creates a socket that will be used by the fork to allow the client to communicate with the proxy
+// 0 = Simple split/merge, 1 = Advanced split/merge, 2 = Custom split/merge
+#define MODE 0
+
+// Creates a socket that will be used by the fork to allow the client to communicate with the server
 int clientSocketTCP;
 
 // Main function
@@ -25,19 +30,19 @@ int main() {
     struct sockaddr *clientAddress;
 
     // Creates char arrays that will store the message between the client and the server
-    char tcpCompleteMessage[MAX_MESSAGE_SIZE];
-    char tcpSplitMessage[MAX_MESSAGE_SIZE];
-    char udpSplitMessage[MAX_MESSAGE_SIZE];
+    char tcpIncomingMessage[MAX_MESSAGE_SIZE];
+    char tcpOutgoingMessage[MAX_MESSAGE_SIZE];
+    char udpMessage[MAX_MESSAGE_SIZE];
 
     // Initialize int variables to store the number of bytes each char array holds
-    int tcpCompleteMessageBytes = 0;
-    int tcpSplitMessageBytes = 0;
-    int udpSplitMessageBytes = 0;
+    int tcpIncomingMessageBytes = 0;
+    int tcpOutgoingMessageBytes = 0;
+    int udpMessageBytes = 0;
 
     // Initializes the incoming and outgoing message and temporary buffer arrays with zeroed bytes
-    memset(tcpCompleteMessage, 0, MAX_MESSAGE_SIZE);
-    memset(tcpSplitMessage, 0, MAX_MESSAGE_SIZE);
-    memset(udpSplitMessage, 0, MAX_MESSAGE_SIZE);
+    memset(tcpIncomingMessage, 0, MAX_MESSAGE_SIZE);
+    memset(tcpOutgoingMessage, 0, MAX_MESSAGE_SIZE);
+    memset(udpMessage, 0, MAX_MESSAGE_SIZE);
 
     // Creates a socket that will be used by the client to initially communicate with the proxy
     int serverSocketTCP;
@@ -126,64 +131,90 @@ int main() {
             }
             int udpPortClient = atoi(clientInfo);
 
-            // Receives the client's message using the socket
-            bzero(tcpCompleteMessage, MAX_MESSAGE_SIZE);
-            tcpCompleteMessageBytes = recv(clientSocketTCP, tcpCompleteMessage, MAX_MESSAGE_SIZE, 0);
+            // Stores the complete client UDP address with the provided port
+            sockaddr_in udpClientAddress = reinterpret_cast<const sockaddr_in &>(clientAddress);
+            udpClientAddress.sin_port = htons(udpPortClient);
 
-            while (tcpCompleteMessageBytes > 0) {
+            // Receives the client's message using the socket
+            bzero(tcpIncomingMessage, MAX_MESSAGE_SIZE);
+            tcpIncomingMessageBytes = recv(clientSocketTCP, tcpIncomingMessage, MAX_MESSAGE_SIZE, 0);
+
+            while (tcpIncomingMessageBytes > 0) {
                 // Stores the client's menu selection
-                int menuSelection = tcpCompleteMessage[0] - '0';
+                int menuSelection = tcpIncomingMessage[0] - '0';
 
                 // Removes the menu selection char from the message
-                memmove(tcpCompleteMessage, tcpCompleteMessage + 1, tcpCompleteMessageBytes);
-                tcpCompleteMessageBytes--;
+                memmove(tcpIncomingMessage, tcpIncomingMessage + 1, tcpIncomingMessageBytes);
+                tcpIncomingMessageBytes--;
 
-                memset(udpSplitMessage, ' ', tcpCompleteMessageBytes);
-                memset(tcpSplitMessage, ' ', tcpCompleteMessageBytes);
-                for (int counter = 0; counter < tcpCompleteMessageBytes; counter++) {
-                    switch (tcpCompleteMessage[counter]) {
-                        case 'A':
-                        case 'E':
-                        case 'I':
-                        case 'O':
-                        case 'U':
-                        case 'a':
-                        case 'e':
-                        case 'i':
-                        case 'o':
-                        case 'u':
-                            udpSplitMessage[counter] = tcpCompleteMessage[counter];
-                            break;
-                        default:
-                            tcpSplitMessage[counter] = tcpCompleteMessage[counter];
-                            break;
+                if (menuSelection == DEVOWEL_VALUE) {
+                    memset(udpMessage, ' ', tcpIncomingMessageBytes);
+                    memset(tcpOutgoingMessage, ' ', tcpIncomingMessageBytes);
+                    for (int counter = 0; counter < tcpIncomingMessageBytes; counter++) {
+                        switch (tcpIncomingMessage[counter]) {
+                            case 'A':
+                            case 'E':
+                            case 'I':
+                            case 'O':
+                            case 'U':
+                            case 'a':
+                            case 'e':
+                            case 'i':
+                            case 'o':
+                            case 'u':
+                                udpMessage[counter] = tcpIncomingMessage[counter];
+                                break;
+                            default:
+                                tcpOutgoingMessage[counter] = tcpIncomingMessage[counter];
+                                break;
+                        }
+                    }
+
+                    // Sends the server's reply to the client
+                    tcpOutgoingMessageBytes = strlen(tcpOutgoingMessage);
+                    if (send(clientSocketTCP, tcpOutgoingMessage, tcpOutgoingMessageBytes, 0) < 0) {
+                        fprintf(stderr, "Server: TCP send() failed!\n");
+                        exit(1);
+                    }
+
+                    // Sends the server's reply to the client
+                    udpMessageBytes = strlen(udpMessage);
+                    if (sendto(serverSocketUDP, udpMessage, udpMessageBytes, MSG_CONFIRM,
+                               (const struct sockaddr *) &udpClientAddress, sizeof udpClientAddress) < 0) {
+                        fprintf(stderr, "Server: UDP send() failed!\n");
+                        exit(1);
+                    }
+                } else if (menuSelection == ENVOWEL_VALUE) {
+                    int len;
+
+                    udpMessageBytes = recvfrom(serverSocketUDP, udpMessage, MAX_MESSAGE_SIZE,
+                                               MSG_WAITALL, NULL, (socklen_t *) sizeof clientAddress);
+                    udpMessage[udpMessageBytes] = '\0';
+
+                    if (tcpIncomingMessageBytes == udpMessageBytes) {
+                        for (int counter = 0; counter < tcpIncomingMessageBytes; counter++) {
+                            if (udpMessage[counter] == ' ' && tcpIncomingMessage[counter] != ' ')
+                                tcpOutgoingMessage[counter] = tcpIncomingMessage[counter];
+                            else if (udpMessage[counter] != ' ' && tcpIncomingMessage[counter] == ' ')
+                                tcpOutgoingMessage[counter] = udpMessage[counter];
+                        }
+                    } else {
+                        sprintf(tcpOutgoingMessage, "MALFORMED MESSAGE(S) PROVIDED!");
+                    }
+
+                    // Sends the server's reply to the client
+                    tcpOutgoingMessageBytes = strlen(tcpOutgoingMessage);
+                    if (send(clientSocketTCP, tcpOutgoingMessage, tcpOutgoingMessageBytes, 0) < 0) {
+                        fprintf(stderr, "Server: TCP send() failed!\n");
+                        exit(1);
                     }
                 }
 
-                // Sends the server's reply to the client
-                tcpSplitMessageBytes = strlen(tcpSplitMessage);
-                if (send(clientSocketTCP, tcpSplitMessage, tcpSplitMessageBytes, 0) < 0) {
-                    fprintf(stderr, "Server: TCP send() failed!\n");
-                    exit(1);
-                }
+                bzero(tcpIncomingMessage, MAX_MESSAGE_SIZE);
+                bzero(tcpOutgoingMessage, MAX_MESSAGE_SIZE);
+                bzero(udpMessage, MAX_MESSAGE_SIZE);
 
-                // Stores the complete client UDP address with the provided port
-                sockaddr_in udpClientAddress = reinterpret_cast<const sockaddr_in &>(clientAddress);
-                udpClientAddress.sin_port = htons(udpPortClient);
-
-                // Sends the server's reply to the client
-                udpSplitMessageBytes = strlen(udpSplitMessage);
-                if (sendto(serverSocketUDP, udpSplitMessage, udpSplitMessageBytes, MSG_CONFIRM,
-                           (const struct sockaddr *) &udpClientAddress, sizeof udpClientAddress) < 0) {
-                    fprintf(stderr, "Server: UDP send() failed!\n");
-                    exit(1);
-                }
-
-                bzero(tcpCompleteMessage, MAX_MESSAGE_SIZE);
-                bzero(tcpSplitMessage, MAX_MESSAGE_SIZE);
-                bzero(udpSplitMessage, MAX_MESSAGE_SIZE);
-
-                tcpCompleteMessageBytes = recv(clientSocketTCP, tcpCompleteMessage, MAX_MESSAGE_SIZE, 0);
+                tcpIncomingMessageBytes = recv(clientSocketTCP, tcpIncomingMessage, MAX_MESSAGE_SIZE, 0);
             }
 
             // Closes the socket with the client and kills the fork
