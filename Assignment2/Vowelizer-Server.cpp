@@ -1,6 +1,9 @@
 /* This file contains modified code from the following source(s):
  * https://www.binarytides.com/socket-programming-c-linux-tutorial/ (Socket Programming in C on Linux provided by the Professor under Useful Links on the course page)
  * http://pages.cpsc.ucalgary.ca/~carey/CPSC441/ass0/mypal-server.c (Professor's palindrome checking server)
+ * http://pages.cpsc.ucalgary.ca/~carey/CPSC441/solutions/mypal-client.c (Professor's palindrome checking client)
+ * UDP_server1.cpp from T04/T10
+ * UDP_client1.cpp from T04/T10
 */
 
 #include <cstdio>
@@ -16,7 +19,7 @@
 #define ENVOWEL_VALUE 2
 
 // Use the following values for selecting the mode: 0 = Simple split/merge, 1 = Advanced split/merge, 2 = Custom split/merge
-#define MODE 0
+#define MODE 1
 
 // Creates sockets that will be used by the fork to allow the client to communicate with the server
 int clientSocketTCP;
@@ -78,12 +81,72 @@ void simpleMerge(char *completeMessage, char *noVowelMessage, char *vowelMessage
 
 // Performs the advanced split operation on the passed in arrays
 void advancedSplit(char *completeMessage, char *noVowelMessage, char *vowelMessage) {
-
+    // Sets both the arrays to contain a blank space string if the string to be devoweled is empty
+    if (strlen(completeMessage) == 0) {
+        sprintf(noVowelMessage, " ");
+        sprintf(vowelMessage, " ");
+    } else if (strlen(noVowelMessage) != 0 && strlen(vowelMessage) == 0)
+        strcpy(completeMessage, noVowelMessage);
+    else {
+        // Loops through the entire message and devowels it into two arrays
+        int displacementValue = 0;
+        for (int counter = 0; counter < strlen(completeMessage); counter++) {
+            switch (completeMessage[counter]) {
+                case 'A':
+                case 'E':
+                case 'I':
+                case 'O':
+                case 'U':
+                case 'a':
+                case 'e':
+                case 'i':
+                case 'o':
+                case 'u':
+                    char temp[2];
+                    sprintf(temp, "%d", displacementValue);
+                    strncat(vowelMessage, &temp[0], 1);
+                    strncat(vowelMessage, &completeMessage[counter], 1);
+                    displacementValue = 0;
+                    break;
+                default:
+                    strncat(noVowelMessage, &completeMessage[counter], 1);
+                    displacementValue++;
+                    break;
+            }
+        }
+        if (strlen(noVowelMessage) == 0)
+            sprintf(noVowelMessage, " ");
+        else if (strlen(vowelMessage) == 0)
+            sprintf(vowelMessage, " ");
+    }
 }
 
 // Performs the advanced merge operation on the passed in arrays
 void advancedMerge(char *completeMessage, char *noVowelMessage, char *vowelMessage) {
-
+    // Loops through both parts of the message and envowels it into one array
+    if (strlen(noVowelMessage) == 0 && strlen(vowelMessage) == 0)
+        sprintf(completeMessage, " ");
+    else {
+        int completeMessageLength = 0;
+        int displacementValue = 0;
+        for (int counter = 0; counter <= strlen(vowelMessage); counter += 2) {
+            if (atoi(&vowelMessage[counter]) == displacementValue) {
+                strncat(completeMessage, &vowelMessage[counter + 1], 1);
+                displacementValue = 0;
+            } else {
+                if (completeMessageLength < strlen(noVowelMessage)) {
+                    strncat(completeMessage, &noVowelMessage[completeMessageLength], 1);
+                    displacementValue++;
+                    completeMessageLength++;
+                    counter -= 2;
+                }
+            }
+        }
+        while (completeMessageLength < (strlen(noVowelMessage) + (strlen(vowelMessage) / 2))) {
+            strncat(completeMessage, &noVowelMessage[completeMessageLength], 1);
+            completeMessageLength++;
+        }
+    }
 }
 
 // Performs the custom split operation on the passed in arrays

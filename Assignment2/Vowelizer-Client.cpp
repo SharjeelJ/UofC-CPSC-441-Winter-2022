@@ -1,7 +1,9 @@
 /* This file contains modified code from the following source(s):
  * https://www.binarytides.com/socket-programming-c-linux-tutorial/ (Socket Programming in C on Linux provided by the Professor under Useful Links on the course page)
- * Client.cpp from T02/T03 Week1
- * Server.cpp from T02/T03 Week1
+ * http://pages.cpsc.ucalgary.ca/~carey/CPSC441/ass0/mypal-server.c (Professor's palindrome checking server)
+ * http://pages.cpsc.ucalgary.ca/~carey/CPSC441/solutions/mypal-client.c (Professor's palindrome checking client)
+ * UDP_server1.cpp from T04/T10
+ * UDP_client1.cpp from T04/T10
 */
 
 #include <cstdio>
