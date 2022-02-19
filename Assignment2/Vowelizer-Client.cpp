@@ -14,9 +14,11 @@
 #include <netinet/in.h>
 #include <cstdlib>
 
-// Global static variables
+// Program configurations
 #define IP "127.0.0.1"
 #define PORT 48259
+
+// Global static variables
 #define MAX_MESSAGE_SIZE 2048
 #define EXIT_VALUE 0
 #define DEVOWEL_VALUE 1
@@ -35,8 +37,8 @@ void printMenu() {
 // Main function
 int main() {
     // Creates structs that will store the complete addresses of the server and client
-    struct sockaddr_in serverAddress;
-    struct sockaddr_in clientAddress;
+    struct sockaddr_in serverAddress{};
+    struct sockaddr_in clientAddress{};
 
     // Creates char arrays that will store the messages between the client and the server
     char tcpIncomingMessage[MAX_MESSAGE_SIZE];
@@ -47,11 +49,6 @@ int main() {
     int tcpOutgoingMessageBytes = 0;
     int tcpIncomingMessageBytes = 0;
     int udpMessageBytes = 0;
-
-    // Initializes the incoming and outgoing message arrays with zeroed bytes
-    bzero(tcpIncomingMessage, MAX_MESSAGE_SIZE);
-    bzero(tcpOutgoingMessage, MAX_MESSAGE_SIZE);
-    bzero(udpMessage, MAX_MESSAGE_SIZE);
 
     // Clears the memory for the locations that will store the addresses
     memset(&serverAddress, 0, sizeof(serverAddress));
@@ -66,27 +63,27 @@ int main() {
     // Sets the complete IP address that the socket will use
     inet_pton(AF_INET, IP, &serverAddress.sin_addr);
 
-    // Creates a TCP socket that will be used to communicate with the server otherwise prints an error and returns if unsuccessful
+    // Creates a TCP socket that will be used to communicate with the server otherwise prints an error and exits if unsuccessful
     int clientSocketTCP = socket(AF_INET, SOCK_STREAM, 0);
     if (clientSocketTCP == -1) {
         printf("TCP Socket Creation Failed!\n");
         exit(1);
     }
 
-    // Creates a UDP socket that will be used to communicate with the server otherwise prints an error and returns if unsuccessful
+    // Creates a UDP socket that will be used to communicate with the server otherwise prints an error and exits if unsuccessful
     int clientSocketUDP = socket(AF_INET, SOCK_DGRAM, 0);
     if (clientSocketUDP == -1) {
         printf("UDP Socket Creation Failed!\n");
         exit(1);
     }
 
-    // Establishes a connection using the TCP socket otherwise prints an error and returns if unsuccessful
+    // Establishes a connection using the TCP socket otherwise prints an error and exits if unsuccessful
     if (connect(clientSocketTCP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in)) == -1) {
         printf("TCP Socket Connection Failed!\n");
         exit(1);
     }
 
-    // Establishes a connection using the UDP socket otherwise prints an error and returns if unsuccessful
+    // Establishes a connection using the UDP socket otherwise prints an error and exits if unsuccessful
     if (connect(clientSocketUDP, (struct sockaddr *) &serverAddress, sizeof(struct sockaddr_in)) == -1) {
         printf("UDP Socket Connection Failed!\n");
         exit(1);
@@ -101,7 +98,7 @@ int main() {
     getsockname(clientSocketUDP, (struct sockaddr *) &clientAddress, &clientAddressLength);
 
     // Sends the client's UDP port number to the server over TCP (this way the server knows where to send UDP packets)
-    char udpClientPortNumber[MAX_MESSAGE_SIZE];
+    char udpClientPortNumber[5];
     sprintf(udpClientPortNumber, "%d", ntohs(clientAddress.sin_port));
     if (send(clientSocketTCP, udpClientPortNumber, strlen(udpClientPortNumber), 0) == -1) {
         printf("Server <-> Client Configuration Communication Failed!\n");
@@ -131,7 +128,7 @@ int main() {
 
         // Checks to see if the user specified the devowel message option
         if (userMenuSelection == DEVOWEL_VALUE) {
-            // Sets the first char in the message that will be sent the user's menu selection
+            // Sets the first char in the message that will be sent to be the user's menu selection
             tcpOutgoingMessageBytes = 1;
             tcpOutgoingMessage[0] = userMenuSelection + '0';
 
@@ -148,21 +145,21 @@ int main() {
             // Null terminates the message
             tcpOutgoingMessage[tcpOutgoingMessageBytes] = '\0';
 
-            // Sends the message using the TCP socket otherwise prints an error and returns if unsuccessful
+            // Sends the message using the TCP socket otherwise prints an error and resets the loop
             tcpOutgoingMessageBytes = send(clientSocketTCP, tcpOutgoingMessage, tcpOutgoingMessageBytes, 0);
             if (tcpOutgoingMessageBytes == -1) {
                 printf("TCP Socket Send Failed!\n");
                 continue;
             }
 
-            // Receives the reply using the TCP socket otherwise prints an error and returns if unsuccessful
+            // Receives the reply using the TCP socket otherwise prints an error and resets the loop
             tcpIncomingMessageBytes = recv(clientSocketTCP, tcpIncomingMessage, MAX_MESSAGE_SIZE, 0);
             if (tcpIncomingMessageBytes == -1) {
                 printf("TCP Socket Receive Failed!\n");
                 continue;
             }
 
-            // Prints out the message if one was received
+            // Prints out the message if one was received otherwise prints an error and resets the loop
             if (tcpIncomingMessageBytes > 0) {
                 // Null terminates the message
                 tcpIncomingMessage[tcpIncomingMessageBytes] = '\0';
@@ -173,16 +170,16 @@ int main() {
                 continue;
             }
 
-            // Receives the reply using the socket UDP otherwise prints an error and returns if unsuccessful
-            int length;
+            // Receives the reply using the socket UDP otherwise prints an error and resets the loop
+            int serverAddressLength;
             udpMessageBytes = recvfrom(clientSocketUDP, udpMessage, MAX_MESSAGE_SIZE, MSG_WAITALL,
-                                       (struct sockaddr *) &serverAddress, (socklen_t *) &length);
+                                       (struct sockaddr *) &serverAddress, (socklen_t *) &serverAddressLength);
             if (udpMessageBytes == -1) {
                 printf("UDP Socket Receive Failed!\n");
                 continue;
             }
 
-            // Prints out the message if one was received
+            // Prints out the message if one was received otherwise prints an error and resets the loop
             if (udpMessageBytes > 0) {
                 // Null terminates the message
                 udpMessage[udpMessageBytes] = '\0';
@@ -194,7 +191,7 @@ int main() {
         }
             // Checks to see if the user specified the envowel message option
         else if (userMenuSelection == ENVOWEL_VALUE) {
-            // Sets the first char in the message that will be sent the user's menu selection
+            // Sets the first char in the message that will be sent to be the user's menu selection
             tcpOutgoingMessageBytes = 1;
             tcpOutgoingMessage[0] = userMenuSelection + '0';
 
@@ -224,28 +221,28 @@ int main() {
             // Null terminates the message
             udpMessage[udpMessageBytes] = '\0';
 
-            // Sends the message using the TCP socket otherwise prints an error and returns if unsuccessful
+            // Sends the message using the TCP socket otherwise prints an error and resets the loop
             tcpOutgoingMessageBytes = send(clientSocketTCP, tcpOutgoingMessage, tcpOutgoingMessageBytes, 0);
             if (tcpOutgoingMessageBytes == -1) {
                 printf("TCP Socket Send Failed!\n");
                 continue;
             }
 
-            // Sends the message using the UDP socket otherwise prints an error and returns if unsuccessful
+            // Sends the message using the UDP socket otherwise prints an error and resets the loop
             if (sendto(clientSocketUDP, udpMessage, udpMessageBytes, MSG_CONFIRM,
                        (const struct sockaddr *) &serverAddress, sizeof serverAddress) < 0) {
                 fprintf(stderr, "TCP Socket Send Failed!\n");
                 continue;
             }
 
-            // Receives the reply using the TCP socket otherwise prints an error and returns if unsuccessful
+            // Receives the reply using the TCP socket otherwise prints an error and resets the loop
             tcpIncomingMessageBytes = recv(clientSocketTCP, tcpIncomingMessage, MAX_MESSAGE_SIZE, 0);
             if (tcpIncomingMessageBytes == -1) {
                 printf("TCP Socket Receive Failed!\n");
                 continue;
             }
 
-            // Prints out the message if one was received
+            // Prints out the message if one was received otherwise prints an error and resets the loop
             if (tcpIncomingMessageBytes > 0) {
                 // Null terminates the message
                 tcpIncomingMessage[tcpIncomingMessageBytes] = '\0';
@@ -254,7 +251,9 @@ int main() {
                 printf("TCP Socket Received Nothing!\n");
                 continue;
             }
-        } else if (userMenuSelection != EXIT_VALUE)
+        }
+            // Checks to see if the user specified an invalid option
+        else if (userMenuSelection != EXIT_VALUE)
             printf("Invalid menu selection. Please try again.\n");
     }
 
