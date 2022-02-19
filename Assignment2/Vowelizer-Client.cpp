@@ -15,7 +15,7 @@
 #include <cstdlib>
 
 // Program configurations
-#define IP "127.0.0.1"
+#define IP "136.159.5.27"
 #define PORT 48259
 
 // Global static variables

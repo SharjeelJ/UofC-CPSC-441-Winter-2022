@@ -3,55 +3,40 @@
 ### Instructions
 
 1) Download Vowelizer-Server.cpp and Vowelizer-Client.cpp and place both into a new folder
-2) Open Vowelizer-Server.cpp in a text editor and set the int value of "#define MODE" as desired (0 = Simple
+2) Open Vowelizer-Server.cpp in a text editor and set the int value of "#define MODE" (line 19) as desired (0 = Simple
    split/merge, 1 = Advanced split/merge, 2 = Custom split/merge)
-3) Open two shell windows and navigate both into the same folder where Vowelizer-Server.cpp and Vowelizer-Client.cpp
+3) Open Vowelizer-Client.cpp in a text editor and set the string value of "#define IP" (line 18) as desired (string
+   should be of the format "X.X.X.X" which is the IPv4 address of the server)
+4) Open two shell windows and navigate both into the same folder where Vowelizer-Server.cpp and Vowelizer-Client.cpp
    were placed
-4) Run the following command (after the colon) in the first shell window without the quotations to run the server: "g++
+5) Run the following command (after the colon) in the first shell window without the quotations to run the server: "g++
    Vowelizer-Server.cpp -o Vowelizer-Server; ./Vowelizer-Server"
-5) Run the following command (after the colon) in the second shell window without the quotations to run the client: "g++
+6) Run the following command (after the colon) in the second shell window without the quotations to run the client: "g++
    Vowelizer-Client.cpp -o Vowelizer-Client; ./Vowelizer-Client"
-6) Perform testing as desired using the client (refer to the Testing Performed section)
-7) Press Control + C to terminate the server and/or client (client can also be terminated using the Exit menu selection)
+7) Perform testing as desired using the client (refer to the Testing Performed section)
+8) Press Control + C to terminate the server and/or client (client can also be terminated using the Exit menu selection)
 
 ### Testing Environment
 
-- UCalgary CPSC Linux Lab (using SSH)
+- Server running on UCalgary CPSC Linux Compute CSX3 (using SSH)
+- Client running on UCalgary CPSC Linux Lab (using SSH)
 
 ### Testing Performed (Strings Contained Inside "")
 
-- Simple Split (MODE 0)
-    - `"Hello there!"`
-    - `""`
-    - `" "`
-    - `"sdf"`
-    - `"aei"`
-    - `" He,L  l.O _ tHEeRe?! "`
-- Simple Merge (MODE 0)
-    - `"H ll  th r !" & " e  o   e e "`
-    - `""` & `""`
-    - `" "` & `" "`
-    - `"sdf"` & `"   "`
-    - `"   "` & `"aei"`
-    - `" H ,L  l.  _ tH  R ?! "` & `"  e      O     Ee e   "`
-- Advanced Split (MODE 1)
-    - `"Hello there!"`
-    - `""`
-    - `" "`
-    - `"sdf"`
-    - `"aei"`
-    - `" He,L  l.O _ tHEeRe?! "`
-- Advanced Merge (MODE 1)
-    - `"Hll thr!" & "1e2o3e1e"`
-    - `""` & `""`
-    - `" "` & `" "`
-    - `"sdf"` & `""`
-    - `""` & `"0a0e0i"`
-    - `" H,L  l. _ tHR?! "` & `"2e6O5E0e1e"`
-- Custom Split (MODE 2)
-    - TODO
-- Custom Merge (MODE 2)
-    - TODO
+- All three of the modes (simple, advanced and custom) had their split and merge functionality tested on the following
+  strings
+    - `"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"`
+    - `"Grocery list: milk, bread, and eggs."`
+    - `"The quick brown fox jumped over the lazy dog."`
+    - `"The Calgary Flames fortuitously won their game 6 to 5 in overtime last week. Cool!"`
+    - `"The postal code for the University of Calgary is T2N 1N4."`
+    - `"In the teen song "Jenny I Need Your Number", her number is 7-5309 if I recall correctly."`
+    - `"It was the best of times; it was the worst of times."`
+    - `"My favourite winter Olympic sports are curling, skiing, and bobsledding."`
+    - `"Facetiously, I said "Curling rocks!"."`
+    - `"Roses are red, Violets are blue, If you can do this test case, You'll score more than 2."`
+    - `"When cleaning the garage, I screamed "Eeeeeeeeek! I see a mouse!!!""`
+    - `"I wonder if there is a DNS entry for www.goooooooogle.com?"`
 
 ### Testing Results
 

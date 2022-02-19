@@ -16,7 +16,7 @@
 // Program configurations
 #define PORT 48259
 // Use the following values for selecting the mode: 0 = Simple split/merge, 1 = Advanced split/merge, 2 = Custom split/merge
-#define MODE 2
+#define MODE 0
 
 // Global static variables
 #define MAX_MESSAGE_SIZE 2048
@@ -284,9 +284,9 @@ void customMerge(char *vowelMessage) {
 
 // Main function
 int main() {
-    // Creates a struct that will store the complete address of the server
-    struct sockaddr_in serverAddress;
-    struct sockaddr *clientAddress;
+    // Creates structs that will store the complete address of the server and client
+    struct sockaddr_in serverAddress{};
+    struct sockaddr_in clientAddress{};
 
     // Creates char arrays that will store the messages between the client and the server
     char tcpIncomingMessage[MAX_MESSAGE_SIZE];
@@ -359,7 +359,8 @@ int main() {
     // Loops forever to handle client requests
     while (true) {
         // Accepts an incoming TCP socket connection request from the client otherwise prints an error and exits if unsuccessful
-        clientSocketTCP = accept(serverSocketTCP, clientAddress, NULL);
+        socklen_t clientAddressLength = sizeof(clientAddress);
+        clientSocketTCP = accept(serverSocketTCP, (struct sockaddr *) &clientAddress, &clientAddressLength);
         if (clientSocketTCP == -1) {
             printf("TCP Accept Failed!\n");
             exit(1);
@@ -385,7 +386,7 @@ int main() {
             int udpClientPortNumber = atoi(clientInfo);
 
             // Stores the complete client UDP address with the provided port
-            sockaddr_in udpClientAddress = reinterpret_cast<const sockaddr_in &>(clientAddress);
+            sockaddr_in udpClientAddress = clientAddress;
             udpClientAddress.sin_port = htons(udpClientPortNumber);
 
             // Keeps running until the client disconnects from the TCP socket handling their connection
