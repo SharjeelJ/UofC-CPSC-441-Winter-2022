@@ -2,6 +2,7 @@
  * https://www.binarytides.com/socket-programming-c-linux-tutorial/ (Socket Programming in C on Linux provided by the Professor under Useful Links on the course page)
  * http://pages.cpsc.ucalgary.ca/~carey/CPSC441/ass0/mypal-server.c (Professor's palindrome checking server)
  * http://pages.cpsc.ucalgary.ca/~carey/CPSC441/solutions/mypal-client.c (Professor's palindrome checking client)
+ * https://web.stanford.edu/class/archive/cs/cs106b/cs106b.1126/handouts/220%20Huffman%20Encoding.pdf (Inspiration for the custom split/merge)
  * UDP_server1.cpp from T04/T10
  * UDP_client1.cpp from T04/T10
 */
@@ -19,7 +20,7 @@
 #define ENVOWEL_VALUE 2
 
 // Use the following values for selecting the mode: 0 = Simple split/merge, 1 = Advanced split/merge, 2 = Custom split/merge
-#define MODE 1
+#define MODE 2
 
 // Creates sockets that will be used by the fork to allow the client to communicate with the server
 int clientSocketTCP;
@@ -149,14 +150,109 @@ void advancedMerge(char *completeMessage, char *noVowelMessage, char *vowelMessa
     }
 }
 
-// Performs the custom split operation on the passed in arrays
-void customSplit(char *completeMessage, char *noVowelMessage, char *vowelMessage) {
-
+// Helper function for the custom split/merge function that converts an integer and vowel into a single character (does not preserve case)
+int encodeVowel(char input, int number) {
+    if (input == 'A' || input == 'a') return 33 + number - '0';
+    else if (input == 'E' || input == 'e') return 43 + number - '0';
+    else if (input == 'I' || input == 'i') return 53 + number - '0';
+    else if (input == 'O' || input == 'o') return 63 + number - '0';
+    else if (input == 'U' || input == 'u') return 73 + number - '0';
 }
 
-// Performs the custom merge operation on the passed in arrays
-void customMerge(char *completeMessage, char *noVowelMessage, char *vowelMessage) {
+// Helper function for the custom split/merge function that decodes a single character into an integer and vowel (does not preserve case)
+void decodeVowel(char input, char result[]) {
+    if (input >= 33 && input < 43) {
+        result[0] = input - 33 + '0';
+        result[1] = 'a';
+    } else if (input >= 43 && input < 53) {
+        result[0] = input - 43 + '0';
+        result[1] = 'e';
 
+    } else if (input >= 53 && input < 63) {
+        result[0] = input - 53 + '0';
+        result[1] = 'i';
+
+    } else if (input >= 63 && input < 73) {
+        result[0] = input - 63 + '0';
+        result[1] = 'o';
+
+    } else if (input >= 73 && input < 83) {
+        result[0] = input - 73 + '0';
+        result[1] = 'u';
+    }
+}
+
+// Helper function for the custom split/merge function that encodes the capitalization of the vowels from the output from the advanced split function into (# of vowels / 5) number of characters (rounded up)
+void encodeCapitalization(char input[], char output[]) {
+    int currentCharNumber = 0;
+    while (currentCharNumber < strlen(input)) {
+        int mask = 64;
+        for (int counter = 0; counter < 5; counter++) {
+            if (currentCharNumber < strlen(input)) {
+                if (input[currentCharNumber] >= 48 && input[currentCharNumber] <= 57) {
+                    counter--;
+                } else if (input[currentCharNumber] >= 97 && input[currentCharNumber] <= 122)
+                    mask = mask | (1 >> counter + 1);
+                else if (input[currentCharNumber] >= 65 && input[currentCharNumber] <= 90)
+                    mask = mask | (64 >> counter + 1);
+            } else {
+                break;
+            }
+            currentCharNumber++;
+        }
+        char temp[1];
+        temp[0] = mask;
+        strncat(output, temp, 1);
+    }
+}
+
+// Helper function for the custom split/merge function that decodes and adjusts the capitalization of the vowels obtained by decoding the custom encoding for the vowels (that does not preserve case by itself otherwise)
+void decodeCapitalization(char input[], char str[]) {
+    for (int counter = 1; counter < strlen(str); counter += 2) {
+        if (input[(counter / 2) / 5] & (64 >> (((counter / 2) % 5) + 1)))
+            if (str[counter] == 'a') str[counter] = 'A';
+            else if (str[counter] == 'e') str[counter] = 'E';
+            else if (str[counter] == 'i') str[counter] = 'I';
+            else if (str[counter] == 'o') str[counter] = 'O';
+            else if (str[counter] == 'u') str[counter] = 'U';
+    }
+}
+
+// Performs the custom split operation on the passed in array
+void customSplit(char *vowelMessage) {
+    char result[MAX_MESSAGE_SIZE];
+    char capitalization[MAX_MESSAGE_SIZE];
+    bzero(result, MAX_MESSAGE_SIZE);
+    bzero(capitalization, MAX_MESSAGE_SIZE);
+
+    encodeCapitalization(vowelMessage, capitalization);
+
+    for (int counter = 0; counter < strlen(vowelMessage); counter += 2)
+        result[counter / 2] = encodeVowel(vowelMessage[counter + 1], vowelMessage[counter]);
+
+    result[strlen(vowelMessage) / 2] = ' ';
+    strncat(result, capitalization, strlen(capitalization));
+    strncpy(vowelMessage, result, strlen(result));
+    vowelMessage[strlen(result)] = '\0';
+}
+
+// Performs the custom merge operation on the passed in array
+void customMerge(char *vowelMessage) {
+    char result[MAX_MESSAGE_SIZE];
+    bzero(result, MAX_MESSAGE_SIZE);
+
+    char *vowels = strtok(vowelMessage, " ");
+    char *capitalization = strtok(NULL, " ");
+
+    for (int counter = 0; counter < strlen(vowels); counter++) {
+        char temp[2];
+        decodeVowel(vowels[counter], temp);
+        result[counter * 2] = temp[0];
+        result[counter * 2 + 1] = temp[1];
+    }
+
+    decodeCapitalization(capitalization, result);
+    strncpy(vowelMessage, result, strlen(result));
 }
 
 // Main function
@@ -303,7 +399,8 @@ int main() {
                             advancedSplit(tcpIncomingMessage, tcpOutgoingMessage, udpMessage);
                             break;
                         case 2:
-                            customSplit(tcpIncomingMessage, tcpOutgoingMessage, udpMessage);
+                            advancedSplit(tcpIncomingMessage, tcpOutgoingMessage, udpMessage);
+                            if (strlen(udpMessage) > 1) customSplit(udpMessage);
                             break;
                     }
 
@@ -350,7 +447,8 @@ int main() {
                             advancedMerge(tcpOutgoingMessage, tcpIncomingMessage, udpMessage);
                             break;
                         case 2:
-                            customMerge(tcpOutgoingMessage, tcpIncomingMessage, udpMessage);
+                            if (strlen(udpMessage) > 1) customMerge(udpMessage);
+                            advancedMerge(tcpOutgoingMessage, tcpIncomingMessage, udpMessage);
                             break;
                     }
 
