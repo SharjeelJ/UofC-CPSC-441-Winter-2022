@@ -105,15 +105,15 @@ void advancedSplit(char *completeMessage, char *noVowelMessage, char *vowelMessa
                 case 'o':
                 case 'u':
                     // Adds the vowel's displacement and the vowel to the vowel message and resets the vowel displacement counter
-                    char temp[1];
+                    char temp[2];
                     sprintf(temp, "%d", displacementValue);
-                    strcat(vowelMessage, &temp[0]);
-                    strcat(vowelMessage, &completeMessage[counter]);
+                    strncat(vowelMessage, &temp[0], 1);
+                    strncat(vowelMessage, &completeMessage[counter], 1);
                     displacementValue = 0;
                     break;
                 default:
                     // Adds the non-vowel to the non-vowel message and increments the vowel displacement counter
-                    strcat(noVowelMessage, &completeMessage[counter]);
+                    strncat(noVowelMessage, &completeMessage[counter], 1);
                     displacementValue++;
                     break;
             }
