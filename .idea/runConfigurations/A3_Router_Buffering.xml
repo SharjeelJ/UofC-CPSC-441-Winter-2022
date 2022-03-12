@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="A3_Router-Buffering" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="UofC_CPSC_441_Winter_2022" TARGET_NAME="A3_Router-Buffering" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="UofC_CPSC_441_Winter_2022" RUN_TARGET_NAME="A3_Router-Buffering">
+  <configuration default="false" name="A3_Router-Buffering" type="CMakeRunConfiguration" factoryName="Application" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" WORKING_DIR="file://$FileDir$" PASS_PARENT_ENVS_2="true" PROJECT_NAME="UofC_CPSC_441_Winter_2022" TARGET_NAME="A3_Router-Buffering" CONFIG_NAME="Debug" RUN_TARGET_PROJECT_NAME="UofC_CPSC_441_Winter_2022" RUN_TARGET_NAME="A3_Router-Buffering">
     <method v="2">
       <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
     </method>
