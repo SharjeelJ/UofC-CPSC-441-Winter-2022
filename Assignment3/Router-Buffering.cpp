@@ -7,7 +7,6 @@
 #include <cstring>
 #include <queue>
 #include <tuple>
-#include <algorithm>
 
 // Router buffer size (maximum number of queued packets that can be held)
 #define BUFFER_SIZE 100
@@ -18,23 +17,19 @@
 // File path of the trace file being simulated
 #define TRACE_FILE "starwars.txt"
 
-// Event types used by the vector tuple
+// Event types
 #define PACKET_ARRIVAL 0
 #define PACKET_DEPARTURE 1
-
-// Custom comparator that will be used to sort the events vector based on the time of the event in descending order (upcoming event will be at the end of the vector)
-bool customComparator(std::tuple<double, int, int> const &event1, std::tuple<double, int, int> const &event2) {
-    return std::get<0>(event1) > std::get<0>(event2);
-}
 
 // Main function
 int main() {
     // Computes and stores the router's transmission speed with different units
     double transmissionSpeedBits = TRANSMISSION_SPEED_MEGABITS * 1000000.0;
-    double transmissionSpeedBytes = transmissionSpeedBits / 8.0;
+    double transmissionSpeedBytes = TRANSMISSION_SPEED_MEGABITS * 125000.0;
 
-    // Vector to store all the events in the simulation (each event is of the form <Time of Event, Byte Size, Type of Event>)
-    std::vector<std::tuple<double, int, int>> events;
+    // Queues to store all the events in the simulation (each event is of the form <Time of Event, Byte Size>)
+    std::queue<std::tuple<double, int>> packetArrivalQueue;
+    std::queue<std::tuple<double, int>> packetDepartureQueue;
 
     // Initialize variables that will be used for the trace file's IO
     FILE *filePointer;
@@ -47,18 +42,15 @@ int main() {
         exit(1);
     }
 
-    // Populates the vector with the contents of the entire trace file
+    // Populates the packet arrival queue with the contents of the entire trace file
     while (fgets(fileCurrentLine, 100, filePointer) != nullptr) {
         double packetArrivalTime = atof(strtok(fileCurrentLine, " "));
         int packetSize = atoi(strtok(nullptr, " "));
-        events.emplace_back(std::make_tuple(packetArrivalTime, packetSize, PACKET_ARRIVAL));
+        packetArrivalQueue.push(std::make_tuple(packetArrivalTime, packetSize));
     }
 
     // Closes the trace file's IO
     fclose(filePointer);
-
-    // Sorts the vector containing all the events in the simulation in descending order based on the time of each event (upcoming event is at the end)
-    std::sort(events.begin(), events.end(), &customComparator);
 
     // Initialize statistical variables for the simulation
     int packetsReceived = 0, packetsSent = 0, packetsLost = 0;
@@ -71,50 +63,79 @@ int main() {
     double currentTime = 0.0;
 
     // Loops through all the stored events (performs the simulation)
-    while (!events.empty()) {
-        double currentEventTime = std::get<0>(events.back());
-        int currentEventSize = std::get<1>(events.back());
-        int currentEventType = std::get<2>(events.back());
+    while (!packetArrivalQueue.empty() || !packetDepartureQueue.empty()) {
+        // Initialize variables that will be updated to store the information relating to the current event being simulated
+        double currentEventTime;
+        int currentEventSize;
+        int currentEventType;
 
+        // Checks to see if both the packet arrival queue and packet departure queue have an entry
+        if (!packetArrivalQueue.empty() && !packetDepartureQueue.empty())
+            // Checks to see if the packet arrival queue's entry occurs before the packet departure queue's entry
+            if (std::get<0>(packetArrivalQueue.front()) < std::get<0>(packetDepartureQueue.front())) {
+                currentEventTime = std::get<0>(packetArrivalQueue.front());
+                currentEventSize = std::get<1>(packetArrivalQueue.front());
+                currentEventType = PACKET_ARRIVAL;
+            } else {
+                currentEventTime = std::get<0>(packetDepartureQueue.front());
+                currentEventSize = std::get<1>(packetDepartureQueue.front());
+                currentEventType = PACKET_DEPARTURE;
+            }
+            // Checks to see if the packet arrival queue has an entry but the packet departure queue is empty
+        else if (!packetArrivalQueue.empty() && packetDepartureQueue.empty()) {
+            currentEventTime = std::get<0>(packetArrivalQueue.front());
+            currentEventSize = std::get<1>(packetArrivalQueue.front());
+            currentEventType = PACKET_ARRIVAL;
+        } else {
+            currentEventTime = std::get<0>(packetDepartureQueue.front());
+            currentEventSize = std::get<1>(packetDepartureQueue.front());
+            currentEventType = PACKET_DEPARTURE;
+        }
+
+        // Updates the current time of the simulation to be the current event's time
         currentTime = currentEventTime;
 
+        // Switch to call the appropriate code based on whether we are handling a packet's arrival or departure event
         switch (currentEventType) {
+            // Run if the current event is a packet arrival
             case PACKET_ARRIVAL:
                 packetsReceived++;
                 bytesReceived += currentEventSize;
 
+                // Checks to see if the buffer is full
                 if (currentBufferOccupancy >= BUFFER_SIZE) {
+                    // Updates the statistical variables and the queue
                     packetsLost++;
                     bytesLost += currentEventSize;
-                    events.pop_back();
+                    packetArrivalQueue.pop();
                 } else {
+                    // Updates the statistical variables and the queues
                     currentBufferOccupancy++;
                     currentBufferSize += currentEventSize;
-                    events.pop_back();
-                    events.emplace_back(
-                            std::make_tuple(currentTime + currentBufferSize / transmissionSpeedBytes, currentEventSize,
-                                            PACKET_DEPARTURE));
+                    packetArrivalQueue.pop();
+                    packetDepartureQueue.push(
+                            std::make_tuple(currentTime + (currentBufferSize / transmissionSpeedBytes),
+                                            currentEventSize));
+
+                    // Checks to see if the record number of packets stored in the buffer has been exceeded
+                    if (currentBufferOccupancy > maxBufferOccupancyHit)
+                        maxBufferOccupancyHit = currentBufferOccupancy;
+
+                    // Checks to see if the record number of bytes stored in the buffer has been exceeded
+                    if (currentBufferSize > maxBufferSizeHit)
+                        maxBufferSizeHit = currentBufferSize;
                 }
                 break;
+                // Run if the current event is a packet departure
             case PACKET_DEPARTURE:
+                // Updates the statistical variables and the queue
                 packetsSent++;
                 bytesSent += currentEventSize;
                 currentBufferOccupancy--;
                 currentBufferSize -= currentEventSize;
-                events.pop_back();
+                packetDepartureQueue.pop();
                 break;
         }
-
-        // Checks to see if the record number of packets stored in the buffer has been exceeded
-        if (currentBufferOccupancy > maxBufferOccupancyHit)
-            maxBufferOccupancyHit = currentBufferOccupancy;
-
-        // Checks to see if the record number of bytes stored in the buffer has been exceeded
-        if (currentBufferSize > maxBufferSizeHit)
-            maxBufferSizeHit = currentBufferSize;
-
-        // Sorts the vector containing all the events in the simulation in descending order based on the time of each event (upcoming event is at the end)
-        std::sort(events.begin(), events.end(), &customComparator);
     }
 
 
