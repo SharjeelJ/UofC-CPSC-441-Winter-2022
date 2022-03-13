@@ -1,8 +1,13 @@
+/* This file contains modified code from the following source(s):
+ * 7-Network-Simulation.pdf from T02/T03
+*/
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <queue>
 #include <tuple>
+#include <algorithm>
 
 // Router buffer size (maximum number of queued packets that can be held)
 #define BUFFER_SIZE 100
@@ -13,10 +18,23 @@
 // File path of the trace file being simulated
 #define TRACE_FILE "starwars.txt"
 
+// Event types used by the vector tuple
+#define PACKET_ARRIVAL 0
+#define PACKET_DEPARTURE 1
+
+// Custom comparator that will be used to sort the events vector based on the time of the event in descending order (upcoming event will be at the end of the vector)
+bool customComparator(std::tuple<double, int, int> const &event1, std::tuple<double, int, int> const &event2) {
+    return std::get<0>(event1) > std::get<0>(event2);
+}
+
+// Main function
 int main() {
     // Computes and stores the router's transmission speed with different units
     double transmissionSpeedBits = TRANSMISSION_SPEED_MEGABITS * 1000000.0;
     double transmissionSpeedBytes = transmissionSpeedBits / 8.0;
+
+    // Vector to store all the events in the simulation (each event is of the form <Time of Event, Byte Size, Type of Event>)
+    std::vector<std::tuple<double, int, int>> events;
 
     // Initialize variables that will be used for the trace file's IO
     FILE *filePointer;
@@ -29,112 +47,76 @@ int main() {
         exit(1);
     }
 
-    // Queue to store the packets from the trace file
-    std::queue<std::tuple<double, int>> packets;
-
-    // Populates the queue with the contents of the entire trace file
+    // Populates the vector with the contents of the entire trace file
     while (fgets(fileCurrentLine, 100, filePointer) != nullptr) {
-        // Gets and stores the packet's arrival time and size (in bytes)
         double packetArrivalTime = atof(strtok(fileCurrentLine, " "));
         int packetSize = atoi(strtok(nullptr, " "));
-        packets.push(std::make_tuple(packetArrivalTime, packetSize));
+        events.emplace_back(std::make_tuple(packetArrivalTime, packetSize, PACKET_ARRIVAL));
     }
 
     // Closes the trace file's IO
     fclose(filePointer);
 
+    // Sorts the vector containing all the events in the simulation in descending order based on the time of each event (upcoming event is at the end)
+    std::sort(events.begin(), events.end(), &customComparator);
+
     // Initialize statistical variables for the simulation
     int packetsReceived = 0, packetsSent = 0, packetsLost = 0;
     int bytesReceived = 0, bytesSent = 0, bytesLost = 0;
-    int currentBufferSize = 0;
+    int currentBufferOccupancy = 0, currentBufferSize = 0;
     int maxBufferOccupancyHit = 0, maxBufferSizeHit = 0;
     double cumulativeDelay = 0;
 
     // Initialize state variables for the simulation
     double currentTime = 0.0;
 
-    // Queue to simulate the router's buffer for storing packets
-    std::queue<std::tuple<double, int>> buffer;
+    // Loops through all the stored events (performs the simulation)
+    while (!events.empty()) {
+        double currentEventTime = std::get<0>(events.back());
+        int currentEventSize = std::get<1>(events.back());
+        int currentEventType = std::get<2>(events.back());
 
-    // Loops through all the stored packets (performs the simulation)
-    while (!packets.empty() || !buffer.empty()) {
-        // Checks to see if there still are packets that will arrive in the future
-        if (!packets.empty()) {
-            // Stores the arrival time and size of the next packet
-            double packetArrivalTime = std::get<0>(packets.front());
-            int packetSize = std::get<1>(packets.front());
+        currentTime = currentEventTime;
 
-            // Checks to see if the buffer size of the router is 0 (means that all packets received will be lost)
-            if (BUFFER_SIZE == 0) {
-                currentTime = packetArrivalTime;
-                packets.pop();
+        switch (currentEventType) {
+            case PACKET_ARRIVAL:
                 packetsReceived++;
-                bytesReceived += packetSize;
-                packetsLost++;
-                bytesLost += packetSize;
-            }
-                // Checks to see if the router buffer is empty
-            else if (buffer.empty()) {
-                buffer.push(std::make_tuple(packetArrivalTime, packetSize));
-                packets.pop();
-                packetsReceived++;
-                bytesReceived += packetSize;
-                currentBufferSize += packetSize;
-            }
-                // Run if there is a packet to arrive and the buffer is not empty
-            else {
-                // Stores how long we have until the next packet will arrive and how long it will take for the oldest packet in the buffer to be sent
-                double nextPacketArrivalTimeDelta = packetArrivalTime - currentTime;
-                double currentPacketSendTimeDelta =
-                        (std::get<1>(buffer.front()) / transmissionSpeedBytes) + std::get<0>(buffer.front()) -
-                        currentTime;
+                bytesReceived += currentEventSize;
 
-                // Checks to see if the oldest packet in the buffer will take longer to send than the packet that is to arrive
-                if (nextPacketArrivalTimeDelta < currentPacketSendTimeDelta && buffer.size() < BUFFER_SIZE) {
-                    buffer.push(std::make_tuple(packetArrivalTime, packetSize));
-                    packets.pop();
-                    packetsReceived++;
-                    bytesReceived += packetSize;
-                    currentBufferSize += packetSize;
-                }
-                    // Checks to see if the oldest packet in the buffer will take less time to send than the packet that is to arrive
-                else if (nextPacketArrivalTimeDelta >= currentPacketSendTimeDelta) {
-                    packetsSent++;
-                    bytesSent += std::get<1>(buffer.front());
-                    currentBufferSize -= std::get<1>(buffer.front());
-                    buffer.pop();
-                    buffer.push(std::make_tuple(packetArrivalTime, packetSize));
-                    currentTime += (std::get<1>(buffer.front()) / transmissionSpeedBytes) + nextPacketArrivalTimeDelta;
-                    packets.pop();
-                    packetsReceived++;
-                    bytesReceived += packetSize;
-                    currentBufferSize += packetSize;
-                } else {
-                    packets.pop();
+                if (currentBufferOccupancy >= BUFFER_SIZE) {
                     packetsLost++;
-                    bytesLost += packetSize;
+                    bytesLost += currentEventSize;
+                    events.pop_back();
+                } else {
+                    currentBufferOccupancy++;
+                    currentBufferSize += currentEventSize;
+                    events.pop_back();
+                    events.emplace_back(
+                            std::make_tuple(currentTime + currentBufferSize / transmissionSpeedBytes, currentEventSize,
+                                            PACKET_DEPARTURE));
                 }
-            }
-        }
-            // Run if there are no packets that will arrive in the future
-        else {
-            while (!buffer.empty()) {
-                currentTime += (std::get<1>(buffer.front()) / transmissionSpeedBytes);
+                break;
+            case PACKET_DEPARTURE:
                 packetsSent++;
-                bytesSent += std::get<1>(buffer.front());
-                currentBufferSize -= std::get<1>(buffer.front());
-                buffer.pop();
-            }
+                bytesSent += currentEventSize;
+                currentBufferOccupancy--;
+                currentBufferSize -= currentEventSize;
+                events.pop_back();
+                break;
         }
+
+        // Checks to see if the record number of packets stored in the buffer has been exceeded
+        if (currentBufferOccupancy > maxBufferOccupancyHit)
+            maxBufferOccupancyHit = currentBufferOccupancy;
 
         // Checks to see if the record number of bytes stored in the buffer has been exceeded
         if (currentBufferSize > maxBufferSizeHit)
             maxBufferSizeHit = currentBufferSize;
 
-        // Checks to see if the record number of packets stored in the buffer has been exceeded
-        if (buffer.size() > maxBufferOccupancyHit)
-            maxBufferOccupancyHit = buffer.size();
+        // Sorts the vector containing all the events in the simulation in descending order based on the time of each event (upcoming event is at the end)
+        std::sort(events.begin(), events.end(), &customComparator);
     }
+
 
     // Prints out the statistical variables after performing the simulation
     printf("AP Buffer Size: %d pkts\n", BUFFER_SIZE);
@@ -149,8 +131,8 @@ int main() {
            (bytesLost / (double) (bytesReceived)) * 100);
     printf("Average Occupancy: %f pkts    %f bytes\n", 0.0, 0.0);
     printf("Average Queuing Delay: %f sec\n", 0.0);
-    printf("Summary: %f %d %d %d %d %d %d %d %f %f %f %f %f\n", transmissionSpeedBits, BUFFER_SIZE,
-           packetsReceived, bytesReceived, packetsSent, bytesSent, packetsLost, bytesLost,
+    printf("Summary: %f %d %d %d %d %d %d %d %f %f %f %f %f\n", transmissionSpeedBits, BUFFER_SIZE, packetsReceived,
+           bytesReceived, packetsSent, bytesSent, packetsLost, bytesLost,
            (packetsLost / (double) (packetsReceived)) * 100, (bytesLost / (double) (bytesReceived)) * 100, 0.0, 0.0,
            0.0);
 
