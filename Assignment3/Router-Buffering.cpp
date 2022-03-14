@@ -118,11 +118,11 @@ int main() {
     }
 
     // Initialize statistical variables for the simulation
-    long packetsReceived = 0, packetsSent = 0, packetsLost = 0;
-    long bytesReceived = 0, bytesSent = 0, bytesLost = 0;
+    long packetsReceived = 0, packetsBuffered = 0, packetsSent = 0, packetsLost = 0;
+    long bytesReceived = 0, bytesBuffered = 0, bytesSent = 0, bytesLost = 0;
     long currentBufferOccupancy = 0, currentBufferSize = 0;
     long maxBufferOccupancyHit = 0, maxBufferSizeHit = 0;
-    double cumulativeDelay = 0;
+    double cumulativeDelay = 0.0;
 
     // Initialize state variables for the simulation
     double currentTime = 0.0;
@@ -177,6 +177,10 @@ int main() {
                     // Updates the statistical variables and the queues
                     currentBufferOccupancy++;
                     currentBufferSize += currentEventSize;
+                    packetsBuffered++;
+                    bytesBuffered += currentEventSize;
+                    cumulativeDelay += (currentTime + (currentBufferSize / transmissionSpeedBytes)) -
+                                       (currentTime + (currentEventSize / transmissionSpeedBytes));
                     packetArrivalQueue.pop();
                     packetDepartureQueue.push(
                             std::make_tuple(currentTime + (currentBufferSize / transmissionSpeedBytes),
@@ -209,17 +213,17 @@ int main() {
     printf("End Time: %f\n", currentTime);
     printf("Incoming Traffic: %ld pkts    %ld bytes\n", packetsReceived, bytesReceived);
     printf("Outgoing Traffic: %ld pkts    %ld bytes\n", packetsSent, bytesSent);
-    printf("Buffered Traffic: %ld pkts    %ld bytes\n", 0, 0);
+    printf("Buffered Traffic: %ld pkts    %ld bytes\n", packetsBuffered, bytesBuffered);
     printf("Discarded Traffic: %ld pkts    %ld bytes\n", packetsLost, bytesLost);
     printf("Peak Occupancy: %ld pkts    %ld bytes\n", maxBufferOccupancyHit, maxBufferSizeHit);
     printf("Lost Traffic: %f%% pkts    %f%% bytes\n", (packetsLost / (double) (packetsReceived)) * 100,
            (bytesLost / (double) (bytesReceived)) * 100);
     printf("Average Occupancy: %f pkts    %f bytes\n", 0.0, 0.0);
-    printf("Average Queuing Delay: %f sec\n", 0.0);
+    printf("Average Queuing Delay: %f sec\n", cumulativeDelay / packetsBuffered);
     printf("Summary: %f %d %ld %ld %ld %ld %ld %ld %f %f %f %f %f\n", transmissionSpeedBits, BUFFER_SIZE,
            packetsReceived, bytesReceived, packetsSent, bytesSent, packetsLost, bytesLost,
            (packetsLost / (double) (packetsReceived)) * 100, (bytesLost / (double) (bytesReceived)) * 100, 0.0, 0.0,
-           0.0);
+           cumulativeDelay / packetsBuffered);
 
     // Ends the program with the success exit code
     exit(0);
