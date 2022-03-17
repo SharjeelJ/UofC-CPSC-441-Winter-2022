@@ -10,13 +10,13 @@
 #include <algorithm>
 
 // Router buffer size (maximum number of queued packets that can be held)
-#define BUFFER_SIZE 1000
+#define BUFFER_SIZE 100
 
 // Router transmission speed in megabits per second (mbps)
-#define TRANSMISSION_SPEED_MEGABITS 6.0
+#define TRANSMISSION_SPEED_MEGABITS 5.0
 
 // File path of the trace file being simulated
-#define TRACE_FILE "starwars.txt"
+#define TRACE_FILE "soccer.txt"
 
 // File path of the bonus trace file being simulated
 #define TRACE_FILE_BONUS "starwars.txt"
@@ -122,6 +122,7 @@ int main() {
     long bytesReceived = 0, bytesBuffered = 0, bytesSent = 0, bytesLost = 0;
     long currentBufferOccupancy = 0, currentBufferSize = 0;
     long maxBufferOccupancyHit = 0, maxBufferSizeHit = 0;
+    long cumulativeBufferOccupancy = 0, cumulativeBufferSize = 0;
     double cumulativeDelay = 0.0;
 
     // Initialize state variables for the simulation
@@ -200,6 +201,8 @@ int main() {
                 // Updates the statistical variables and the queue
                 packetsSent++;
                 bytesSent += currentEventSize;
+                cumulativeBufferOccupancy += currentBufferOccupancy;
+                cumulativeBufferSize += currentBufferSize;
                 currentBufferOccupancy--;
                 currentBufferSize -= currentEventSize;
                 packetDepartureQueue.pop();
@@ -218,11 +221,14 @@ int main() {
     printf("Peak Occupancy: %ld pkts    %ld bytes\n", maxBufferOccupancyHit, maxBufferSizeHit);
     printf("Lost Traffic: %f%% pkts    %f%% bytes\n", (packetsLost / (double) (packetsReceived)) * 100,
            (bytesLost / (double) (bytesReceived)) * 100);
-    printf("Average Occupancy: %f pkts    %f bytes\n", 0.0, 0.0);
+    printf("Average Occupancy: %f pkts    %f KB\n", cumulativeBufferOccupancy / (double) packetsBuffered,
+           (cumulativeBufferSize / (double) packetsBuffered) / 1000);
     printf("Average Queuing Delay: %f sec\n", cumulativeDelay / packetsBuffered);
     printf("Summary: %f %d %ld %ld %ld %ld %ld %ld %f %f %f %f %f\n", transmissionSpeedBits, BUFFER_SIZE,
            packetsReceived, bytesReceived, packetsSent, bytesSent, packetsLost, bytesLost,
-           (packetsLost / (double) (packetsReceived)) * 100, (bytesLost / (double) (bytesReceived)) * 100, 0.0, 0.0,
+           (packetsLost / (double) (packetsReceived)) * 100, (bytesLost / (double) (bytesReceived)) * 100,
+           cumulativeBufferOccupancy / (double) packetsBuffered,
+           (cumulativeBufferSize / (double) packetsBuffered) / 1000,
            cumulativeDelay / packetsBuffered);
 
     // Ends the program with the success exit code
