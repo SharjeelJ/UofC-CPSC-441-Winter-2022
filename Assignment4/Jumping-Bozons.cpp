@@ -43,7 +43,7 @@ double Exponential(double mu) {
 }
 
 // Gets the index for the smallest value (next event) from the passed in array of doubles
-int getSmallestValueIndex(double array[]) {
+int getSmallestValueIndex(const double array[]) {
     int smallestValueIndex = 0;
     for (int counter = 0; counter < BOZONS; counter++)
         if (array[counter] < array[smallestValueIndex])
@@ -54,14 +54,11 @@ int getSmallestValueIndex(double array[]) {
 // Main function
 int main() {
     // Initialize statistical variables for the simulation
-    int activeYodlers = 0, currentBozon = 0, bozonStatuses[BOZONS];
-    double eventTimes[BOZONS];
+    int activeYodlers = 0, latestYodeler = -1, currentBozon, bozonStatuses[BOZONS];
     int yodels = 0, perfectYodels = 0;
-    int latestYodeler = -1;
-    double latestYodelStartTime = 0.0, latestYodelEndTime = 0.0;
-    bool yodelInterrupted = false;
+    double currentTime = 0.0, latestYodelEndTime = 0.0, eventTimes[BOZONS];
     double idleTime = 0.0, perfectYodelTime = 0.0, melodiousTime = 0.0, screechTime = 0.0;
-    double currentTime = 0.0;
+    bool yodelInterrupted = false;
 
     // Populates the event times array with an initial random sleep duration for each bozon
     for (int bozon = 0; bozon < BOZONS; bozon++) {
@@ -71,7 +68,7 @@ int main() {
 
     // Runs the simulation until the next event ends up being after the predefined end time
     while (eventTimes[getSmallestValueIndex(eventTimes)] <= END_TIME) {
-        // Stores the bozon that is responsible for the next event (acts as an index to access the event information)
+        // Stores the bozon that is responsible for the next event (acts as an index to access the event's information)
         currentBozon = getSmallestValueIndex(eventTimes);
 
         // Declare the variable that will store the time for the next event for the bozon being handled currently
@@ -103,7 +100,6 @@ int main() {
 
                     // Updates the statistical variables
                     idleTime += eventTimes[currentBozon] - currentTime;
-                    latestYodelStartTime = eventTimes[currentBozon];
                     latestYodelEndTime = newEventTime;
                     currentTime = eventTimes[currentBozon];
                 }
@@ -118,16 +114,15 @@ int main() {
                         currentTime = eventTimes[currentBozon];
                     }
 
-                    // Checks to see if the current bozon's yodel will end before the existing yodel, and if so then records the duration of this yodel as screech time and sets the current time to be the end of the yodel (as this time segment has been accounted for)
-                    if (latestYodelEndTime > newEventTime) {
+                    // Checks to see if the current bozon's yodel will end before the existing yodel, and if so then records the entire duration of this yodel as screech time and sets the current time to be the end of the yodel (as this time segment has been accounted for)
+                    if (latestYodelEndTime > newEventTime && currentTime < newEventTime) {
                         screechTime += newEventTime - currentTime;
                         currentTime = newEventTime;
                     }
                         // If the current bozon's yodel will end after the existing yodel then records the overlapping duration of the two as screech time and sets the current time to be the end of the existing yodel (as this time segment has been accounted for) and stores this yodel as the most recent yodel
-                    else {
+                    else if (currentTime < newEventTime) {
                         screechTime += latestYodelEndTime - currentTime;
                         currentTime = latestYodelEndTime;
-                        latestYodelStartTime = eventTimes[currentBozon];
                         latestYodelEndTime = newEventTime;
                     }
                 }
@@ -137,7 +132,7 @@ int main() {
                 latestYodeler = currentBozon;
                 eventTimes[currentBozon] = newEventTime;
                 break;
-                // Handles the case where the bozon is current yodeling and will stop and go to sleep
+                // Handles the case where the bozon is currently yodeling and will stop and go to sleep
             case YODELING:
                 // Updates the state of the bozon
                 bozonStatuses[currentBozon] = SLEEPING;
@@ -168,8 +163,8 @@ int main() {
 
     // Prints out the statistical variables after performing the simulation
     printf("M = %i, S = %.3f, Y = %.3f\n", BOZONS, YODEL_DURATION, SLEEP_DURATION);
-    printf("Total time observing channel: %.3f\n", currentBozon);
-    printf("  Idle time on channel:        %.3f    %.3f%%\n", idleTime, (idleTime / END_TIME) * 100);
+    printf("Total time observing channel: %.3f\n", END_TIME);
+    printf("  Idle time on channel:        %.3f    %.3f%%\n", idleTime, ((idleTime / END_TIME) * 100));
     printf("  Melodious time on channel:   %.3f    %.3f%%\n", melodiousTime, ((melodiousTime / END_TIME) * 100));
     printf("  Screech time on channel:     %.3f    %.3f%%\n", screechTime, ((screechTime / END_TIME) * 100));
     printf("\n");
