@@ -6,21 +6,18 @@
 #include <cstdlib>
 #include <cmath>
 
-// Constants
+// Simulation configuration parameters
 #define BOZONS 5
 #define SLEEP_DURATION 60.0
 #define YODEL_DURATION 60.0
-
-// Simulation parameters
 #define END_TIME 1000000.000
+
+// Yodel duration model (change to true for yodel duration to be a constant)
+#define STANDARDIZED_YODEL_DURATION false
 
 // Bozon states
 #define SLEEPING 0
 #define YODELING 1
-
-// Yodel duration model
-#define EXPONENTIAL 1
-//#define CONSTANT 1
 
 // Parameters for random number generation (maximum positive integer 2^31 - 1)
 #define MAX_INT 2147483647
@@ -45,6 +42,7 @@ double Exponential(double mu) {
     return (ans);
 }
 
+// Gets the index for the smallest value (next event) from the passed in array of doubles
 int getSmallestValueIndex(double array[]) {
     int smallestValueIndex = 0;
     for (int counter = 0; counter < BOZONS; counter++)
@@ -53,9 +51,11 @@ int getSmallestValueIndex(double array[]) {
     return smallestValueIndex;
 }
 
+// Main function
 int main() {
-    int activeYodlers = 0, bozon = 0, bozonStatus[BOZONS];
-    double eventEndTime[BOZONS];
+    // Initialize statistical variables for the simulation
+    int activeYodlers = 0, currentBozon = 0, bozonStatuses[BOZONS];
+    double eventTimes[BOZONS];
     int yodels = 0, perfectYodels = 0;
     int latestYodeler = -1;
     double latestYodelStartTime = 0.0, latestYodelEndTime = 0.0;
@@ -63,100 +63,121 @@ int main() {
     double idleTime = 0.0, perfectYodelTime = 0.0, melodiousTime = 0.0, screechTime = 0.0;
     double currentTime = 0.0;
 
-    for (int currentBozon = 0; currentBozon < BOZONS; currentBozon++) {
-        bozonStatus[currentBozon] = SLEEPING;
-        eventEndTime[currentBozon] = Exponential(SLEEP_DURATION);
+    // Populates the event times array with an initial random sleep duration for each bozon
+    for (int bozon = 0; bozon < BOZONS; bozon++) {
+        bozonStatuses[bozon] = SLEEPING;
+        eventTimes[bozon] = Exponential(SLEEP_DURATION);
     }
 
-//    while (currentTime <= END_TIME) {
-    while (eventEndTime[getSmallestValueIndex(eventEndTime)] <= END_TIME) {
-        bozon = getSmallestValueIndex(eventEndTime);
-        double newEventEndTime;
+    // Runs the simulation until the next event ends up being after the predefined end time
+    while (eventTimes[getSmallestValueIndex(eventTimes)] <= END_TIME) {
+        // Stores the bozon that is responsible for the next event (acts as an index to access the event information)
+        currentBozon = getSmallestValueIndex(eventTimes);
 
+        // Declare the variable that will store the time for the next event for the bozon being handled currently
+        double newEventTime;
+
+        // Stops the simulation if there are no bozons to simulate
         if (BOZONS == 0) {
             idleTime = END_TIME;
             break;
         }
 
-        switch (bozonStatus[bozon]) {
+        // Switch to call the appropriate code segment if the bozon is waking up or going to sleep
+        switch (bozonStatuses[currentBozon]) {
+            // Handles the case where the bozon is current sleeping and will wake up and begin yodeling
             case SLEEPING:
-                bozonStatus[bozon] = YODELING;
-                newEventEndTime = eventEndTime[bozon] + Exponential(YODEL_DURATION);
+                // Updates the state of the bozon
+                bozonStatuses[currentBozon] = YODELING;
 
+                // Stores the new event time for when the bozon will stop this activity
+                if (!STANDARDIZED_YODEL_DURATION)
+                    newEventTime = eventTimes[currentBozon] + Exponential(YODEL_DURATION);
+                else
+                    newEventTime = eventTimes[currentBozon] + YODEL_DURATION;
+
+                // Handles the case where there were no active yodelers before this bozon woke up (meaning the channel was idle)
                 if (activeYodlers == 0) {
+                    // Sets the interrupted yodel flag to false as this yodel is starting during otherwise idle time
                     yodelInterrupted = false;
-                    activeYodlers++;
-                    idleTime += eventEndTime[bozon] - currentTime;
-                    latestYodelStartTime = eventEndTime[bozon];
-                    latestYodelEndTime = newEventEndTime;
-                    currentTime = eventEndTime[bozon];
-                } else {
-                    yodelInterrupted = true;
-                    activeYodlers++;
 
-                    if (currentTime < eventEndTime[bozon]) {
-                        melodiousTime += eventEndTime[bozon] - currentTime;
-                        currentTime = eventEndTime[bozon];
+                    // Updates the statistical variables
+                    idleTime += eventTimes[currentBozon] - currentTime;
+                    latestYodelStartTime = eventTimes[currentBozon];
+                    latestYodelEndTime = newEventTime;
+                    currentTime = eventTimes[currentBozon];
+                }
+                    // Handles the case where there is at least 1 active yodel before this bozon woke up (meaning that it will interrupt a yodel)
+                else {
+                    // Sets the interrupted yodel flag to true as this yodel is starting during a yodel
+                    yodelInterrupted = true;
+
+                    // Checks to see if the current time of the simulation that has been accounted for is not further ahead than the current event, and if so then sets the appropriate statistical variables
+                    if (currentTime < eventTimes[currentBozon]) {
+                        melodiousTime += eventTimes[currentBozon] - currentTime;
+                        currentTime = eventTimes[currentBozon];
                     }
 
-                    if (latestYodelEndTime > newEventEndTime) {
-                        screechTime += newEventEndTime - currentTime;
-                        currentTime = newEventEndTime;
-                    } else {
+                    // Checks to see if the current bozon's yodel will end before the existing yodel, and if so then records the duration of this yodel as screech time and sets the current time to be the end of the yodel (as this time segment has been accounted for)
+                    if (latestYodelEndTime > newEventTime) {
+                        screechTime += newEventTime - currentTime;
+                        currentTime = newEventTime;
+                    }
+                        // If the current bozon's yodel will end after the existing yodel then records the overlapping duration of the two as screech time and sets the current time to be the end of the existing yodel (as this time segment has been accounted for) and stores this yodel as the most recent yodel
+                    else {
                         screechTime += latestYodelEndTime - currentTime;
                         currentTime = latestYodelEndTime;
-                        latestYodelStartTime = eventEndTime[bozon];
-                        latestYodelEndTime = newEventEndTime;
+                        latestYodelStartTime = eventTimes[currentBozon];
+                        latestYodelEndTime = newEventTime;
                     }
                 }
 
-                latestYodeler = bozon;
-
-                eventEndTime[bozon] = newEventEndTime;
+                // Updates the statistical variables
+                activeYodlers++;
+                latestYodeler = currentBozon;
+                eventTimes[currentBozon] = newEventTime;
                 break;
+                // Handles the case where the bozon is current yodeling and will stop and go to sleep
             case YODELING:
-                newEventEndTime = eventEndTime[bozon] + Exponential(SLEEP_DURATION);
-                if (latestYodeler == bozon && activeYodlers == 1 && !yodelInterrupted) {
-                    bozonStatus[bozon] = SLEEPING;
-                    activeYodlers--;
-                    yodels++;
+                // Updates the state of the bozon
+                bozonStatuses[currentBozon] = SLEEPING;
+
+                // Stores the new event time for when the bozon will stop this activity
+                newEventTime = eventTimes[currentBozon] + Exponential(SLEEP_DURATION);
+
+                // Checks to see if the current yodel was not interrupted (meaning that the latest yodel is from the same bozon who is going to sleep now and there is only 1 active yodeler) meaning that it was a perfect yodel
+                if (latestYodeler == currentBozon && activeYodlers == 1 && !yodelInterrupted) {
                     perfectYodels++;
-
-                    perfectYodelTime += eventEndTime[bozon] - currentTime;
-                    melodiousTime += eventEndTime[bozon] - currentTime;
-
-                    if (currentTime < eventEndTime[bozon])
-                        currentTime = eventEndTime[bozon];
-
-                    eventEndTime[bozon] = newEventEndTime;
-                } else {
-                    bozonStatus[bozon] = SLEEPING;
-                    activeYodlers--;
-                    yodels++;
-
-                    if (currentTime < eventEndTime[bozon]) {
-                        melodiousTime += eventEndTime[bozon] - currentTime;
-                        currentTime = eventEndTime[bozon];
-                    }
-
-                    eventEndTime[bozon] = newEventEndTime;
+                    perfectYodelTime += eventTimes[currentBozon] - currentTime;
                 }
+
+                // Checks to see if the current time of the simulation that has been accounted for is not further ahead than the current event, and if so then sets the appropriate statistical variables
+                if (currentTime < eventTimes[currentBozon]) {
+                    melodiousTime += eventTimes[currentBozon] - currentTime;
+                    currentTime = eventTimes[currentBozon];
+                }
+
+                // Updates the statistical variables
+                activeYodlers--;
+                latestYodeler = -1;
+                yodels++;
+                eventTimes[currentBozon] = newEventTime;
                 break;
         }
     }
 
     // Prints out the statistical variables after performing the simulation
-    printf("M = %i, S = %f, Y = %f\n", BOZONS, YODEL_DURATION, SLEEP_DURATION);
-    printf("Total time observing channel: %f\n", END_TIME);
-    printf("  Idle time on channel: %f    %f%%\n", idleTime, (idleTime / END_TIME) * 100);
-    printf("  Melodious time on channel: %f    %f%%\n", melodiousTime, ((melodiousTime / END_TIME) * 100));
-    printf("  Screech time on channel: %f    %f%%\n", screechTime, ((screechTime / END_TIME) * 100));
+    printf("M = %i, S = %.3f, Y = %.3f\n", BOZONS, YODEL_DURATION, SLEEP_DURATION);
+    printf("Total time observing channel: %.3f\n", currentBozon);
+    printf("  Idle time on channel:        %.3f    %.3f%%\n", idleTime, (idleTime / END_TIME) * 100);
+    printf("  Melodious time on channel:   %.3f    %.3f%%\n", melodiousTime, ((melodiousTime / END_TIME) * 100));
+    printf("  Screech time on channel:     %.3f    %.3f%%\n", screechTime, ((screechTime / END_TIME) * 100));
     printf("\n");
     printf("  Attempted yodels: %i\n", yodels);
     printf("  Perfect yodels: %i\n", perfectYodels);
-    printf("  Perfect yodels/Attempted yodels: %f (%f%%)\n", ((double) perfectYodels / yodels),
+    printf("  Perfect yodels/Attempted yodels: %.3f (%.3f%%)\n", ((double) perfectYodels / yodels),
            (((double) perfectYodels / yodels) * 100));
-    printf("  Perfect yodel time on the channel: %f (%f%%)\n", perfectYodelTime,
+    printf("  Perfect yodel time on the channel: %.3f (%.3f%%)\n", perfectYodelTime,
            ((perfectYodelTime / END_TIME) * 100));
 
     // Ends the program with the success exit code
