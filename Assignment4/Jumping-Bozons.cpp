@@ -2,17 +2,12 @@
  * http://pages.cpsc.ucalgary.ca/~carey/CPSC441/ass4/rand.txt (Professor's exponentially-distributed random number generator)
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <time.h>
-#include <vector>
-#include <tuple>
-#include <algorithm>
-#include <queue>
+#include <cstdio>
+#include <cstdlib>
+#include <cmath>
 
 // Constants
-#define BOZONS 2
+#define BOZONS 5
 #define SLEEP_DURATION 60.0
 #define YODEL_DURATION 60.0
 
@@ -34,7 +29,6 @@
 double Uniform01() {
     double randnum;
     // get a random positive integer from random()
-//    srandom(time(NULL));
     randnum = (double) 1.0 * rand();
 
     // divide by max int to get something in the range 0.0 to 1.0
@@ -60,11 +54,12 @@ int getSmallestValueIndex(double array[]) {
 }
 
 int main() {
-    int simulationState = SLEEPING, bozon = 0, bozonStatus[BOZONS];
+    int activeYodlers = 0, bozon = 0, bozonStatus[BOZONS];
     double eventEndTime[BOZONS];
     int yodels = 0, perfectYodels = 0;
     int latestYodeler = -1;
-    double latestYodelStartTime = -1.0, latestYodelEndTime = -1.0;
+    double latestYodelStartTime = 0.0, latestYodelEndTime = 0.0;
+    bool yodelInterrupted = false;
     double idleTime = 0.0, perfectYodelTime = 0.0, melodiousTime = 0.0, screechTime = 0.0;
     double currentTime = 0.0;
 
@@ -73,151 +68,95 @@ int main() {
         eventEndTime[currentBozon] = Exponential(SLEEP_DURATION);
     }
 
-    while (currentTime <= END_TIME) {
+//    while (currentTime <= END_TIME) {
+    while (eventEndTime[getSmallestValueIndex(eventEndTime)] <= END_TIME) {
         bozon = getSmallestValueIndex(eventEndTime);
+        double newEventEndTime;
+
+        if (BOZONS == 0) {
+            idleTime = END_TIME;
+            break;
+        }
 
         switch (bozonStatus[bozon]) {
             case SLEEPING:
-                simulationState = YODELING;
                 bozonStatus[bozon] = YODELING;
+                newEventEndTime = eventEndTime[bozon] + Exponential(YODEL_DURATION);
 
-                if (simulationState == SLEEPING)
+                if (activeYodlers == 0) {
+                    yodelInterrupted = false;
+                    activeYodlers++;
                     idleTime += eventEndTime[bozon] - currentTime;
+                    latestYodelStartTime = eventEndTime[bozon];
+                    latestYodelEndTime = newEventEndTime;
+                    currentTime = eventEndTime[bozon];
+                } else {
+                    yodelInterrupted = true;
+                    activeYodlers++;
+
+                    if (currentTime < eventEndTime[bozon]) {
+                        melodiousTime += eventEndTime[bozon] - currentTime;
+                        currentTime = eventEndTime[bozon];
+                    }
+
+                    if (latestYodelEndTime > newEventEndTime) {
+                        screechTime += newEventEndTime - currentTime;
+                        currentTime = newEventEndTime;
+                    } else {
+                        screechTime += latestYodelEndTime - currentTime;
+                        currentTime = latestYodelEndTime;
+                        latestYodelStartTime = eventEndTime[bozon];
+                        latestYodelEndTime = newEventEndTime;
+                    }
+                }
 
                 latestYodeler = bozon;
-                latestYodelStartTime = eventEndTime[bozon];
-                currentTime = eventEndTime[bozon];
-                eventEndTime[bozon] += Exponential(YODEL_DURATION);
-                latestYodelEndTime = eventEndTime[bozon];
+
+                eventEndTime[bozon] = newEventEndTime;
                 break;
             case YODELING:
-                if (latestYodeler == bozon) {
-                    simulationState = SLEEPING;
+                newEventEndTime = eventEndTime[bozon] + Exponential(SLEEP_DURATION);
+                if (latestYodeler == bozon && activeYodlers == 1 && !yodelInterrupted) {
                     bozonStatus[bozon] = SLEEPING;
-
-                    perfectYodels++;
-                    perfectYodelTime += eventEndTime[bozon] - currentTime;
-
-                    currentTime = eventEndTime[bozon];
-                    eventEndTime[bozon] += Exponential(SLEEP_DURATION);
-                } else {
-                    bozonStatus[bozon] = SLEEPING;
-
+                    activeYodlers--;
                     yodels++;
+                    perfectYodels++;
+
+                    perfectYodelTime += eventEndTime[bozon] - currentTime;
                     melodiousTime += eventEndTime[bozon] - currentTime;
 
-                    currentTime = eventEndTime[bozon];
-                    eventEndTime[bozon] += Exponential(SLEEP_DURATION);
+                    if (currentTime < eventEndTime[bozon])
+                        currentTime = eventEndTime[bozon];
+
+                    eventEndTime[bozon] = newEventEndTime;
+                } else {
+                    bozonStatus[bozon] = SLEEPING;
+                    activeYodlers--;
+                    yodels++;
+
+                    if (currentTime < eventEndTime[bozon]) {
+                        melodiousTime += eventEndTime[bozon] - currentTime;
+                        currentTime = eventEndTime[bozon];
+                    }
+
+                    eventEndTime[bozon] = newEventEndTime;
                 }
                 break;
         }
-
-//        if (simulationState == SLEEPING) {
-//            idleTime += eventEndTime[bozon] - currentTime;
-//            bozonStatus[bozon] = YODELING;
-//            currentTime = eventEndTime[bozon];
-//            latestYodelStartTime = eventEndTime[bozon];
-//            eventEndTime[bozon] += Exponential(YODEL_DURATION);
-//            latestYodelEndTime = eventEndTime[bozon];
-//            simulationState = YODELING;
-//            latestYodeler = bozon;
-//        } else {
-//            if (bozon == latestYodeler) {
-//                perfectYodels++;
-//                perfectYodelTime += eventEndTime[bozon] - currentTime;
-//                latestYodeler = -1;
-//                latestYodelStartTime = -1.0;
-//                latestYodelEndTime = -1.0;
-//                bozonStatus[bozon] = SLEEPING;
-//                simulationState = SLEEPING;
-//                currentTime = eventEndTime[bozon];
-//                eventEndTime[bozon] = Exponential(SLEEP_DURATION);
-//            } else {
-//            }
-//
-//            melodiousTime += eventEndTime[bozon] - currentTime;
-//            currentTime = eventEndTime[bozon];
-//        }
-//
-//
-//        double nextYodelStartTime = std::get<0>(eventsQueue.front());
-//        double nextYodelEndTime = std::get<1>(eventsQueue.front());
-//
-//        if (currentEventStartTime == 0 && currentEventEndTime == 0) {
-//            currentEventStartTime = nextYodelStartTime;
-//            currentEventEndTime = nextYodelEndTime;
-//            idleTime += nextYodelStartTime;
-//            currentTime = nextYodelStartTime;
-//            eventsQueue.pop();
-//            nextYodelStartTime = std::get<0>(eventsQueue.front());
-//            nextYodelEndTime = std::get<1>(eventsQueue.front());
-//        }
-//
-//        if (currentEventEndTime <= nextYodelStartTime) {
-//            melodiousTime += currentEventEndTime - currentTime;
-//            if (!currentYodelInterrupted) {
-//                perfectYodels++;
-//                perfectYodelTime += currentEventEndTime - currentTime;
-//            }
-//            currentYodelInterrupted = false;
-//            idleTime += nextYodelStartTime - currentEventEndTime;
-//            currentEventStartTime = nextYodelStartTime;
-//            currentEventEndTime = nextYodelEndTime;
-//            currentTime = currentEventStartTime;
-//            eventsQueue.pop();
-//        } else {
-//            currentYodelInterrupted = true;
-//            melodiousTime += nextYodelStartTime - currentTime;
-//            currentTime = nextYodelStartTime;
-//
-////            nextYodelStartTime = std::get<0>(eventsQueue.front());
-////            nextYodelEndTime = std::get<1>(eventsQueue.front());
-////            eventsQueue.pop();
-//
-//            if (currentEventEndTime > nextYodelEndTime) {
-//                while (currentEventEndTime > nextYodelEndTime && !eventsQueue.empty()) {
-//                    screechTime += nextYodelEndTime - currentTime;
-//                    currentTime = nextYodelEndTime;
-//
-//                    eventsQueue.pop();
-//                    nextYodelStartTime = std::get<0>(eventsQueue.front());
-//                    nextYodelEndTime = std::get<1>(eventsQueue.front());
-//                }
-//                melodiousTime += nextYodelStartTime - currentTime;
-//                currentTime = nextYodelStartTime;
-//
-//                screechTime += currentEventEndTime - currentTime;
-//                currentTime = currentEventEndTime;
-//            } else {
-//                screechTime += currentEventEndTime - currentTime;
-//                currentTime = currentEventEndTime;
-//            }
-//
-//            currentEventStartTime = nextYodelStartTime;
-//            currentEventEndTime = nextYodelEndTime;
-//            eventsQueue.pop();
-//        }
-//    }
-//
-//    if (!currentYodelInterrupted) {
-//        perfectYodels++;
-//        perfectYodelTime += currentEventEndTime - currentTime;
-//    } else {
-//        melodiousTime += currentEventEndTime - currentTime;
     }
 
     // Prints out the statistical variables after performing the simulation
     printf("M = %i, S = %f, Y = %f\n", BOZONS, YODEL_DURATION, SLEEP_DURATION);
-    printf("Total eventEndTime observing channel: %f\n", END_TIME);
-    printf("  Idle eventEndTime on channel: %f    %f%%\n", idleTime, (idleTime / END_TIME) * 100);
-    printf("  Melodious eventEndTime on channel: %f    %f%%\n", melodiousTime, ((melodiousTime / END_TIME) * 100));
-    printf("  Screech eventEndTime on channel: %f    %f%%\n", screechTime, ((screechTime / END_TIME) * 100));
+    printf("Total time observing channel: %f\n", END_TIME);
+    printf("  Idle time on channel: %f    %f%%\n", idleTime, (idleTime / END_TIME) * 100);
+    printf("  Melodious time on channel: %f    %f%%\n", melodiousTime, ((melodiousTime / END_TIME) * 100));
+    printf("  Screech time on channel: %f    %f%%\n", screechTime, ((screechTime / END_TIME) * 100));
     printf("\n");
     printf("  Attempted yodels: %i\n", yodels);
     printf("  Perfect yodels: %i\n", perfectYodels);
     printf("  Perfect yodels/Attempted yodels: %f (%f%%)\n", ((double) perfectYodels / yodels),
            (((double) perfectYodels / yodels) * 100));
-    printf("  Perfect yodel eventEndTime on the channel: %f (%f%%)\n", perfectYodelTime,
+    printf("  Perfect yodel time on the channel: %f (%f%%)\n", perfectYodelTime,
            ((perfectYodelTime / END_TIME) * 100));
 
     // Ends the program with the success exit code
