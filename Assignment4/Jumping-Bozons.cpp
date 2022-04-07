@@ -162,7 +162,7 @@ int main() {
     }
 
     // Prints out the statistical variables after performing the simulation
-    printf("M = %i, S = %.3f, Y = %.3f\n", BOZONS, YODEL_DURATION, SLEEP_DURATION);
+    printf("M = %i, S = %.3f, Y = %.3f\n", BOZONS, SLEEP_DURATION, YODEL_DURATION);
     printf("Total time observing channel: %.3f\n", END_TIME);
     printf("  Idle time on channel:        %.3f    %.3f%%\n", idleTime, ((idleTime / END_TIME) * 100));
     printf("  Melodious time on channel:   %.3f    %.3f%%\n", melodiousTime, ((melodiousTime / END_TIME) * 100));
